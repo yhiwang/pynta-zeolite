@@ -100,28 +100,28 @@
   reaction: C=C + C=C + [H][Pt] <=> CCCC[Pt]
   reaction_family: Surface_Concerted_Dimerization
 
-- index: 3
-  reactant: |
-    multiplicity 1
-    1 *1 Cu u0 p0 c0 {2,S} {3,S}
-    2 *2 X u0 p0 c0 {1,S}
-    3 *3 X u0 p0 c0 {1,S}
-    4 *4 C u0 p0 c0 {5,D} {6,S} {7,S}
-    5 *5 C u0 p0 c0 {4,D} {8,S} {9,S}
-    6 H u0 p0 c0 {4,S}
-    7 H u0 p0 c0 {4,S}
-    8 H u0 p0 c0 {5,S}
-    9 H u0 p0 c0 {5,S}
-  product: |
-    multiplicity 1
-    1 *1 Cu u0 p0 c0 {2,S} {3,S} {4,S} {5,S}
-    2 *2 X u0 p0 c0 {1,S}
-    3 *3 X u0 p0 c0 {1,S}
-    4 *4 C u0 p0 c0 {5,S} {6,S} {7,S} {1,S}
-    5 *5 C u0 p0 c0 {4,S} {8,S} {9,S} {1,S}
-    6 H u0 p0 c0 {4,S}
-    7 H u0 p0 c0 {4,S}
-    8 H u0 p0 c0 {5,S}
-    9 H u0 p0 c0 {5,S}
-  reaction: '[Cu] + C=C <=> C2H4[Cu]'
-  reaction_family: Surface_Adsorption
+# - index: 3
+#   reactant: |
+#     multiplicity 1
+#     1 *1 Cu u0 p0 c0 {2,S} {3,S}
+#     2 *2 X u0 p0 c0 {1,S}
+#     3 *3 X u0 p0 c0 {1,S}
+#     4 *4 C u0 p0 c0 {5,D} {6,S} {7,S}
+#     5 *5 C u0 p0 c0 {4,D} {8,S} {9,S}
+#     6 H u0 p0 c0 {4,S}
+#     7 H u0 p0 c0 {4,S}
+#     8 H u0 p0 c0 {5,S}
+#     9 H u0 p0 c0 {5,S}
+#   product: |
+#     multiplicity 1
+#     1 *1 Cu u0 p0 c0 {2,S} {3,S} {4,S} {5,S}
+#     2 *2 X u0 p0 c0 {1,S}
+#     3 *3 X u0 p0 c0 {1,S}
+#     4 *4 C u0 p0 c0 {5,S} {6,S} {7,S} {1,S}
+#     5 *5 C u0 p0 c0 {4,S} {8,S} {9,S} {1,S}
+#     6 H u0 p0 c0 {4,S}
+#     7 H u0 p0 c0 {4,S}
+#     8 H u0 p0 c0 {5,S}
+#     9 H u0 p0 c0 {5,S}
+#   reaction: '[Cu] + C=C <=> C2H4[Cu]'
+#   reaction_family: Surface_Adsorption
