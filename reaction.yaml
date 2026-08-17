@@ -1,3 +1,12 @@
+# Minimal C2/C4 reaction set for a Bronsted acid zeolite
+# Three elementary steps, all primary alkoxides, framework-agnostic
+# (X is just a framework site -- this file works for MFI, CHA, MOR, FER...)
+#
+# Format: RMG-style adjacency lists; X = framework site, [Pt] = surface placeholder
+# Two-site convention: Bronsted proton site and alkoxide site are separate X atoms
+#
+# NOTE: index 2 is the exact microscopic reverse of index 1. See reactions.txt.
+
 - index: 0
   reactant: |
     multiplicity 1
@@ -65,63 +74,37 @@
 - index: 2
   reactant: |
     multiplicity 1
-    1 *1 C u0 p0 c0 {2,D} {3,S} {4,S}
-    2 *2 C u0 p0 c0 {1,D} {5,S} {6,S}
-    3 H u0 p0 c0 {1,S}
-    4 H u0 p0 c0 {1,S}
-    5 H u0 p0 c0 {2,S}
-    6 H u0 p0 c0 {2,S}
-    7 *3 C u0 p0 c0 {8,D} {9,S} {10,S}
-    8 *4 C u0 p0 c0 {7,D} {11,S} {12,S}
-    9 H u0 p0 c0 {7,S}
-    10 H u0 p0 c0 {7,S}
-    11 H u0 p0 c0 {8,S}
-    12 H u0 p0 c0 {8,S}
-    13 *5 H u0 p0 c0 {14,S}
-    14 *6 X u0 p0 c0 {13,S}
-    15 *7 X u0 p0 c0
+    1 *1 C u0 p0 c0 {2,S} {5,S} {6,S} {14,S}
+    2 *2 C u0 p0 c0 {1,S} {3,S} {7,S} {8,S}
+    3 *3 C u0 p0 c0 {2,S} {4,S} {9,S} {10,S}
+    4 C u0 p0 c0 {3,S} {11,S} {12,S} {13,S}
+    5 H u0 p0 c0 {1,S}
+    6 H u0 p0 c0 {1,S}
+    7 H u0 p0 c0 {2,S}
+    8 H u0 p0 c0 {2,S}
+    9 H u0 p0 c0 {3,S}
+    10 H u0 p0 c0 {3,S}
+    11 H u0 p0 c0 {4,S}
+    12 H u0 p0 c0 {4,S}
+    13 H u0 p0 c0 {4,S}
+    14 *4 X u0 p0 c0 {1,S}
+    15 *5 X u0 p0 c0
   product: |
     multiplicity 1
-    1 *1 C u0 p0 c0 {2,S} {3,S} {4,S} {13,S}
-    2 *2 C u0 p0 c0 {1,S} {5,S} {6,S} {7,S}
-    3 H u0 p0 c0 {1,S}
-    4 H u0 p0 c0 {1,S}
-    5 H u0 p0 c0 {2,S}
-    6 H u0 p0 c0 {2,S}
-    7 *3 C u0 p0 c0 {2,S} {8,S} {9,S} {10,S}
-    8 *4 C u0 p0 c0 {7,S} {11,S} {12,S} {15,S}
-    9 H u0 p0 c0 {7,S}
-    10 H u0 p0 c0 {7,S}
-    11 H u0 p0 c0 {8,S}
-    12 H u0 p0 c0 {8,S}
-    13 *5 H u0 p0 c0 {1,S}
-    14 *6 X u0 p0 c0
-    15 *7 X u0 p0 c0 {8,S}
-  reaction: C=C + C=C + [H][Pt] <=> CCCC[Pt]
-  reaction_family: Surface_Concerted_Dimerization
-
-# - index: 3
-#   reactant: |
-#     multiplicity 1
-#     1 *1 Cu u0 p0 c0 {2,S} {3,S}
-#     2 *2 X u0 p0 c0 {1,S}
-#     3 *3 X u0 p0 c0 {1,S}
-#     4 *4 C u0 p0 c0 {5,D} {6,S} {7,S}
-#     5 *5 C u0 p0 c0 {4,D} {8,S} {9,S}
-#     6 H u0 p0 c0 {4,S}
-#     7 H u0 p0 c0 {4,S}
-#     8 H u0 p0 c0 {5,S}
-#     9 H u0 p0 c0 {5,S}
-#   product: |
-#     multiplicity 1
-#     1 *1 Cu u0 p0 c0 {2,S} {3,S} {4,S} {5,S}
-#     2 *2 X u0 p0 c0 {1,S}
-#     3 *3 X u0 p0 c0 {1,S}
-#     4 *4 C u0 p0 c0 {5,S} {6,S} {7,S} {1,S}
-#     5 *5 C u0 p0 c0 {4,S} {8,S} {9,S} {1,S}
-#     6 H u0 p0 c0 {4,S}
-#     7 H u0 p0 c0 {4,S}
-#     8 H u0 p0 c0 {5,S}
-#     9 H u0 p0 c0 {5,S}
-#   reaction: '[Cu] + C=C <=> C2H4[Cu]'
-#   reaction_family: Surface_Adsorption
+    1 *1 C u0 p0 c0 {2,D} {5,S} {6,S}
+    2 *2 C u0 p0 c0 {1,D} {7,S} {8,S}
+    3 *3 C u0 p0 c0 {4,S} {9,S} {10,S} {15,S}
+    4 C u0 p0 c0 {3,S} {11,S} {12,S} {13,S}
+    5 H u0 p0 c0 {1,S}
+    6 H u0 p0 c0 {1,S}
+    7 H u0 p0 c0 {2,S}
+    8 H u0 p0 c0 {2,S}
+    9 H u0 p0 c0 {3,S}
+    10 H u0 p0 c0 {3,S}
+    11 H u0 p0 c0 {4,S}
+    12 H u0 p0 c0 {4,S}
+    13 H u0 p0 c0 {4,S}
+    14 *4 X u0 p0 c0
+    15 *5 X u0 p0 c0 {3,S}
+  reaction: CCCC[Pt] <=> C=C + CC[Pt]
+  reaction_family: Surface_Beta_Scission

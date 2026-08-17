@@ -1,16 +1,15 @@
 import numpy as np
-import random
 from ase.data import covalent_radii
+from ase.neighborlist import NeighborList, natural_cutoffs
 
-# ============================================================
-# Overlap detection  (used by add_adsorbate_to_site_z)
-# ============================================================
 
 def find_overlaps(combined, framework_indices, adsorbate_indices,
                   tol=0.7, ignore_pairs=None, show=False):
-    """List of clashing (adsorbate_idx, framework_idx) pairs in COMBINED index
-    space, excluding ignore_pairs. Empty list => no overlap. Reads only.
-    `combined` must carry the framework cell/pbc for mic to work."""
+    """Clashing (adsorbate_idx, framework_idx) pairs in COMBINED index space.
+
+    Empty list means no overlap. A hard boolean screen, unlike the maximin
+    score the placement sweep ranks by. `combined` must carry the framework
+    cell and pbc for mic to work."""
     ignore = set(ignore_pairs) if ignore_pairs else set()
     D = combined.get_all_distances(mic=True)
     radii = covalent_radii[combined.get_atomic_numbers()]
@@ -22,48 +21,37 @@ def find_overlaps(combined, framework_indices, adsorbate_indices,
             if D[a, f] < tol * (radii[a] + radii[f]):
                 overlaps.append((a, f))
                 if show:
-                    print(f"  overlap: ads {a} <-> fw {f}  d={D[a, f]:.2f} A")
+                    print("  overlap: ads %d <-> fw %d  d=%.2f A"
+                          % (a, f, D[a, f]))
     return overlaps
 
 
 def check_for_overlaps(combined, framework_indices, adsorbate_indices,
                        tol=0.7, ignore_pairs=None, show=False):
-    """True if any adsorbate-framework clash remains after ignoring ignore_pairs."""
     return len(find_overlaps(combined, framework_indices, adsorbate_indices,
-                             tol=tol, ignore_pairs=ignore_pairs, show=show)) > 0
+                             tol=tol, ignore_pairs=ignore_pairs,
+                             show=show)) > 0
 
-
-# ============================================================
-# Adsorbate <-> framework distances  (clearance diagnostics)
-# ============================================================
 
 def adsorbate_framework_distances(placed_ads, framework):
-    """(n_ads, n_fw) minimum-image distance block. D[a, f] = distance from
-    adsorbate atom a to framework atom f. Framework-first so the combined keeps
-    the framework cell/pbc (needed for mic)."""
+    """(n_ads, n_fw) minimum-image distance block. Framework first so the
+    combined keeps the framework cell and pbc."""
     combined = framework + placed_ads
     n_fw = len(framework)
     return combined.get_all_distances(mic=True)[n_fw:, :n_fw]
 
 
 def closest_framework_per_atom(placed_ads, framework):
-    """Per adsorbate atom, its nearest framework atom as (framework_idx, distance).
-    Used to check that the binding atom is the closest atom to the wall."""
+    """Per adsorbate atom, its nearest framework atom as (index, distance)."""
     D = adsorbate_framework_distances(placed_ads, framework)
-    result = []
-    for a in range(D.shape[0]):
-        f_idx = int(np.argmin(D[a]))     # nearest framework atom to adsorbate atom a
-        result.append((f_idx, D[a, f_idx]))
-    return result
+    return [(int(np.argmin(D[a])), D[a, int(np.argmin(D[a]))])
+            for a in range(D.shape[0])]
 
-
-# ============================================================
-# Rotation utilities
-# ============================================================
 
 def get_center_of_mass_pbc(atoms):
-    """Mass-weighted COM robust to periodic wrap-around (circular mean of
-    fractional coordinates)."""
+    """Mass-weighted COM robust to wrap-around, via the circular mean of the
+    fractional coordinates. Use this instead of get_center_of_mass() whenever
+    the group might straddle a cell boundary."""
     masses = atoms.get_masses()
     total_mass = masses.sum()
     cell = atoms.get_cell()
@@ -75,18 +63,109 @@ def get_center_of_mass_pbc(atoms):
     return np.dot(avg_theta, cell)
 
 
-def rotate_free(ads):
-    """Rigid RANDOM rotation of an isolated molecule about its own COM, no wrap.
-    NOTE: not used by the deterministic spin-about-normal placement; keep only if
-    you need random orientation sampling elsewhere."""
-    m = ads.copy()
-    axis = np.random.randn(3)
-    axis /= np.linalg.norm(axis)
-    m.rotate(random.uniform(-180, 180), axis, center=m.get_center_of_mass())
-    return m
+def find_framework_indices(atoms, elements=("Si", "O", "Al"), min_size=10):
+    """Indices of the largest connected cluster of `elements`.
+
+    mult=1.0 is required, not stylistic: a looser cutoff starts reporting
+    non-bonded contacts as bonds and fuses the adsorbate into the framework
+    cluster. Returns [] when nothing reaches min_size (gas phase)."""
+    nl = NeighborList(natural_cutoffs(atoms, mult=1.0), skin=0.0,
+                      self_interaction=False, bothways=True)
+    nl.update(atoms)
+    allowed = {i for i, a in enumerate(atoms) if a.symbol in elements}
+
+    seen, clusters = set(), []
+    for start in sorted(allowed):
+        if start in seen:
+            continue
+        cluster, stack = set(), [start]
+        seen.add(start)
+        while stack:
+            current = stack.pop()
+            cluster.add(current)
+            for neighbor in nl.get_neighbors(current)[0]:
+                neighbor = int(neighbor)
+                if neighbor in allowed and neighbor not in seen:
+                    seen.add(neighbor)
+                    stack.append(neighbor)
+        clusters.append(cluster)
+
+    if not clusters:
+        return []
+    biggest = max(clusters, key=len)
+    return sorted(biggest) if len(biggest) >= min_size else []
 
 
-# DEPRECATED: random_rotate wraps atoms (atoms.wrap()) and can split a molecule
-# across the cell boundary -- the failure you moved away from. Left out of the
-# active file on purpose. Re-add only if you truly need in-cell rotation, and
-# unwrap the molecule afterward.
+def extra_framework_indices(atoms):
+    framework = set(find_framework_indices(atoms))
+    return [i for i in range(len(atoms)) if i not in framework]
+
+
+def nearest_framework(atoms, index, framework):
+    distances = atoms.get_distances(index, framework, mic=True)
+    k = int(np.argmin(distances))
+    return framework[k], float(distances[k])
+
+
+def adsorbate_neighbors(nl, index, adsorbate_set):
+    """Bonded neighbors of an adsorbate atom, adsorbate atoms only.
+
+    Framework partners are excluded on purpose: a guess pressed into the pore
+    wall puts a tail H inside covalent range of a framework O, and relaxation
+    pushing it back out would read as a bond breaking."""
+    return sorted(j for j in map(int, nl.get_neighbors(index)[0])
+                  if j in adsorbate_set)
+
+
+def binder_neighbors(atoms, nl, binder, adsorbate_set, framework):
+    """Adsorbate neighbors of a binder, plus the single nearest framework
+    atom rather than everything inside the cutoff."""
+    site, _ = nearest_framework(atoms, binder, framework)
+    return sorted(adsorbate_neighbors(nl, binder, adsorbate_set) + [site])
+
+
+def neighbor_map(atoms, binders, mult=1.2):
+    """{adsorbate index: [bonded neighbors]} for every adsorbate atom.
+
+    mult=1.2, not the 1.0 used by find_framework_indices: covalent radii sum
+    to 1.07 A for C-H, under the real bond length, so a tight cutoff returns
+    no molecular bonds at all. The two values are opposed on purpose.
+
+    `binders` comes from info.json, never from geometry -- a clashing guess
+    can put a tail atom as close to the wall as the binder is."""
+    nl = NeighborList(natural_cutoffs(atoms, mult=mult), skin=0.0,
+                      self_interaction=False, bothways=True)
+    nl.update(atoms)
+
+    framework = find_framework_indices(atoms)
+    adsorbate = extra_framework_indices(atoms)
+    adsorbate_set, binder_set = set(adsorbate), set(binders)
+
+    neighbors = {}
+    for i in adsorbate:
+        if i in binder_set and framework:
+            neighbors[i] = binder_neighbors(atoms, nl, i, adsorbate_set,
+                                            framework)
+        else:
+            neighbors[i] = adsorbate_neighbors(nl, i, adsorbate_set)
+    return neighbors
+
+
+def check_config_survived(initial, relaxed, neighbors, threshold=0.5):
+    """(survived, rows) for the bonds in `neighbors`, rows being
+    (i, j, d0, d1, delta) for every bond that moved more than threshold,
+    largest change first.
+
+    Each adsorbate-adsorbate bond appears twice in the map, once under each
+    atom, so pairs are collapsed first. threshold=0.5 because these are
+    bonds: a C-C at 1.53 A reaching 2.0 A has broken."""
+    pairs = sorted({(min(i, j), max(i, j))
+                    for i, js in neighbors.items() for j in js})
+    rows = []
+    for i, j in pairs:
+        d0 = initial.get_distance(i, j, mic=True)
+        d1 = relaxed.get_distance(i, j, mic=True)
+        if abs(d1 - d0) > threshold:
+            rows.append((i, j, d0, d1, d1 - d0))
+    rows.sort(key=lambda row: -abs(row[4]))
+    return not rows, rows

@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+test_run/
+collected_configs/
+models/
+*.traj
+*.png
+slurm-*.out
+job.out
+job.err
