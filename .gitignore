@@ -1,10 +1,5 @@
+models/
 __pycache__/
 *.pyc
-test_run/
-collected_configs/
-models/
 *.traj
-*.png
-slurm-*.out
-job.out
-job.err
+test_run/
