@@ -32,7 +32,7 @@ def main():
     parser.add_argument("--adjlist", help="file holding an RMG adjacency list")
     args = parser.parse_args()
 
-    from pynta.mol import get_name
+    from pyntaz.pynta_mol import get_name
     from pyntaz.framework import build_framework
     from pyntaz.reactions import molecule_from_adjlist
     from pyntaz.adsorbates import write_species_guesses

@@ -1,0 +1,17 @@
+name: pyntaz-slim
+channels:
+  - conda-forge
+  - mjohnson541
+dependencies:
+  - python=3.9
+  - numpy=1.26
+  - ase=3.22.1
+  - rmgmolecule=0.3.0
+  - cython<3
+  - networkx>=3.0
+  - pyyaml
+  - matplotlib
+  - scipy
+  - pip
+  - pip:
+      - maze-sim

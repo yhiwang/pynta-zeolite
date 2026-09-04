@@ -24,6 +24,10 @@ relaxation rather than used as a final geometry:
   a single bond leaves a free torsion that is NOT optimized here --
   ``rotatable_bonds()`` reports every free torsion and ``build(torsions=...)``
   takes the angles you choose, defaulting to anti (180 degrees);
+* a five-coordinate atom is trigonal bipyramidal; which two neighbors take
+  the axial slots is not decided here -- ``hypervalent_atoms()`` reports
+  them and ``build(axial={label: (a, b)})`` takes the pair, defaulting to
+  the anchor plus the lowest-labeled unplaced neighbor;
 * ``X`` atoms are surface sites, not real atoms: they take part in the
   geometry (so the binding direction is defined) but are kept as anchors in
   ``site_anchors`` and excluded from ``to_ase()`` unless you ask for the
@@ -34,7 +38,7 @@ imports fine on a compute node.
 
 Known limits (raise clear errors, not wrong geometry): bridged bicyclics
 (two rings sharing more than one edge / two non-adjacent bridgeheads) and
-atoms with steric number > 4.
+atoms with steric number > 5.
 """
 
 import math
@@ -325,15 +329,21 @@ class AdjacencyStructure:
         mol = AdjacencyStructure.from_adjlist(text)
         print(mol.report())              # rings, sites, free torsions
         mol.rotatable_bonds()            # {(i, j): {...}, ...}
-        atoms = mol.build(torsions={(2, 3): 60.0})   # ase.Atoms, no X
+        mol.hypervalent_atoms()          # {label: [neighbors], ...}
+        atoms = mol.build(torsions={(2, 3): 60.0}, axial={1: (5, 9)})
+        # bond_scales={(1, 5): 1.35} lengthens a breaking/forming bond
         atoms_with_site = mol.to_ase(include_sites=True)
         mol.site_anchors                 # {x_label: {"position", "bonded_to"}}
     """
 
-    def __init__(self, atom_specs, site_bond_length=DEFAULT_SITE_BOND):
+    def __init__(self, atom_specs, site_bond_length=DEFAULT_SITE_BOND,
+                 site_elements=None, site_bond_scale=1.0, bond_scales=None):
         self.spec = atom_specs
         self.labels = sorted(atom_specs)
         self.site_bond_length = site_bond_length
+        self.site_elements = dict(site_elements or {})
+        self.site_bond_scale = site_bond_scale
+        self.bond_scales = dict(bond_scales or {})
         self.neighbors = {label: sorted(atom_specs[label]["bonds"])
                           for label in self.labels}
         self.rings = find_rings(self.neighbors)
@@ -342,8 +352,9 @@ class AdjacencyStructure:
                            for r in self.rings for k in range(len(r))}
         self.site_labels = [l for l in self.labels
                             if atom_specs[l]["element"] == SITE_ELEMENT]
-        self.positions = None      # {label: np.array}, set by build()
-        self.site_anchors = {}     # set by build()
+        self.positions = None
+        self.site_anchors = {}
+        self._axial = {}
         self._validate()
 
     # -- constructors ------------------------------------------------------
@@ -370,18 +381,27 @@ class AdjacencyStructure:
         return len(self.neighbors[label]) + self.spec[label]["lone_pairs"]
 
     def hybridization(self, label):
-        return {2: "sp", 3: "sp2", 4: "sp3"}.get(self.steric_number(label),
-                                                 "other")
+        return {2: "sp", 3: "sp2", 4: "sp3", 5: "sp3d"}.get(
+            self.steric_number(label), "other")
 
     def is_ring_atom(self, label):
         return any(label in ring for ring in self.rings)
 
     def bond_length(self, a, b):
-        if SITE_ELEMENT in (self.element(a), self.element(b)):
-            return self.site_bond_length
-        radii = sum(covalent_radii[atomic_numbers[self.element(x)]]
-                    for x in (a, b))
-        return LENGTH_FACTORS.get(self.bond_order(a, b), 1.0) * radii
+        per_bond = self.bond_scales.get(tuple(sorted((a, b))), 1.0)
+        element_a, element_b = self.element(a), self.element(b)
+        is_site = SITE_ELEMENT in (element_a, element_b)
+        if is_site:
+            if element_a == SITE_ELEMENT:
+                element_a = self.site_elements.get(a)
+            if element_b == SITE_ELEMENT:
+                element_b = self.site_elements.get(b)
+            if element_a is None or element_b is None:
+                return self.site_bond_length * per_bond
+        radii = (covalent_radii[atomic_numbers[element_a]]
+                 + covalent_radii[atomic_numbers[element_b]])
+        length = LENGTH_FACTORS.get(self.bond_order(a, b), 1.0) * radii * per_bond
+        return length * self.site_bond_scale if is_site else length
 
     def formula(self):
         counts = {}
@@ -398,11 +418,11 @@ class AdjacencyStructure:
                 raise AdjacencyListError("unknown element %r on atom %d"
                                          % (element, label))
             if (element != SITE_ELEMENT
-                    and self.steric_number(label) > 4
+                    and self.steric_number(label) > 5
                     and self.neighbors[label]):
                 raise AdjacencyListError(
-                    "atom %d (%s) has steric number %d; only up to 4 "
-                    "(sp3) is supported" % (label, element,
+                    "atom %d (%s) has steric number %d; only up to 5 "
+                    "(sp3d) is supported" % (label, element,
                                             self.steric_number(label)))
         for system in self.ring_systems:
             self._check_ring_system(system)
@@ -424,7 +444,7 @@ class AdjacencyStructure:
                             "rings share two non-adjacent atoms %s (bridged);"
                             " not supported yet" % sorted(shared))
 
-    # -- torsions ----------------------------------------------------------
+    # -- torsions and hypervalent centres ----------------------------------
 
     def _start_atom(self):
         """Rings first; else a site X; else the busiest atom."""
@@ -487,6 +507,19 @@ class AdjacencyStructure:
                     "note": "dihedral %d-%d-%d-%d" % (ref_i, i, j, ref_j)}
         return result
 
+    def hypervalent_atoms(self):
+        """Five-domain atoms: trigonal bipyramidal, with two axial slots
+        (180 apart) and three equatorial. ``{label: [neighbor labels]}``.
+
+        Which two neighbors are axial is chemistry, not geometry, so it is
+        not decided here -- pass a pair to ``build(axial={label: (a, b)})``.
+        Left unset, the anchor takes one axial slot and the lowest-labeled
+        unplaced neighbor the other.
+        """
+        return {label: list(self.neighbors[label])
+                for label in self.labels
+                if self.steric_number(label) == 5}
+
     def _torsion_for(self, i, j, torsions):
         for key in ((i, j), (j, i)):
             if key in torsions:
@@ -495,14 +528,16 @@ class AdjacencyStructure:
 
     # -- build -------------------------------------------------------------
 
-    def build(self, torsions=None, pucker=DEFAULT_PUCKER):
+    def build(self, torsions=None, axial=None, pucker=DEFAULT_PUCKER):
         """Generate coordinates; returns an ``ase.Atoms`` without X sites.
 
         ``torsions`` maps rotatable-bond keys (either orientation) to
         dihedral angles in degrees; anything unspecified defaults to 180
-        (anti). Unknown or non-rotatable keys raise, so a typo cannot be
-        silently ignored. ``pucker`` is the out-of-plane displacement of sp3
-        ring atoms in Angstrom (0 gives flat rings).
+        (anti). ``axial`` maps a five-coordinate atom label to the pair of
+        neighbors that take its axial slots; unset centres use the anchor
+        plus the lowest-labeled unplaced neighbor. Unknown keys raise, so a
+        typo cannot be silently ignored. ``pucker`` is the out-of-plane
+        displacement of sp3 ring atoms in Angstrom (0 gives flat rings).
         """
         torsions = dict(torsions or {})
         allowed = self.rotatable_bonds()
@@ -512,6 +547,23 @@ class AdjacencyStructure:
                 raise AdjacencyListError(
                     "torsion key %s is not a rotatable bond; options: %s"
                     % (key, sorted(allowed)))
+
+        axial = dict(axial or {})
+        hypervalent = self.hypervalent_atoms()
+        for label, partners in axial.items():
+            if label not in hypervalent:
+                raise AdjacencyListError(
+                    "atom %s is not five-coordinate; options: %s"
+                    % (label, sorted(hypervalent)))
+            if len(partners) != 2:
+                raise AdjacencyListError(
+                    "atom %d needs exactly 2 axial neighbors, got %s"
+                    % (label, list(partners)))
+            for partner in partners:
+                if partner not in self.neighbors[label]:
+                    raise AdjacencyListError(
+                        "atom %d is not bonded to atom %s" % (label, partner))
+        self._axial = {k: tuple(v) for k, v in axial.items()}
 
         pos = {}
         built_systems = [False] * len(self.ring_systems)
@@ -570,11 +622,18 @@ class AdjacencyStructure:
             steric = max(len(self.neighbors[j]), 1)
         center = pos[j]
 
+        axial_pair = self._axial.get(j, ())
+        anchor_axial = not axial_pair or (bool(anchored)
+                                          and anchored[0] in axial_pair)
+        if axial_pair:
+            wanted = [n for n in axial_pair if n in new]
+            new = wanted + [n for n in new if n not in wanted]
+
         if not anchored:
             directions = self._fresh_directions(steric)
         elif len(anchored) == 1:
             directions = self._directions_one_anchor(
-                j, anchored[0], len(new), steric, pos, torsions)
+                j, anchored[0], len(new), steric, pos, torsions, anchor_axial)
         else:
             directions = self._directions_many_anchors(
                 j, anchored, len(new), steric, pos)
@@ -589,6 +648,10 @@ class AdjacencyStructure:
 
     @staticmethod
     def _fresh_directions(steric):
+        if steric >= 5:
+            raise AdjacencyListError(
+                "five-coordinate atom cannot start the build; there is no "
+                "anchor to orient the trigonal bipyramid against")
         if steric <= 1:
             return [np.array([0.0, 0.0, 1.0])]
         if steric == 2:
@@ -600,12 +663,16 @@ class AdjacencyStructure:
         return [np.array(v) * root for v in
                 ((1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1))]
 
-    def _directions_one_anchor(self, j, i, n_new, steric, pos, torsions):
+    def _directions_one_anchor(self, j, i, n_new, steric, pos, torsions,
+                               anchor_axial=True):
         """Directions for j's new neighbors when only ``i`` is placed.
 
         A single bond gives a free torsion (user angle or anti default); a
         double/triple bond locks the azimuth to i's substituent plane, which
-        is what keeps pi systems planar.
+        is what keeps pi systems planar. For a five-coordinate centre,
+        ``anchor_axial`` says whether the anchor occupies an axial slot (so
+        the opposite axial leads the returned directions) or an equatorial
+        one (so both axials lead).
         """
         axis = _unit(pos[j] - pos[i])        # i -> j, dihedral axis
         toward_parent = -axis
@@ -623,18 +690,25 @@ class AdjacencyStructure:
         else:
             tau = self._torsion_for(i, j, torsions)
 
-        if steric >= 4:
-            beta, azimuths = TETRA, [tau, tau + 120.0, tau - 120.0]
+        if steric >= 5:
+            if anchor_axial:
+                pairs = [(180.0, tau), (90.0, tau),
+                         (90.0, tau + 120.0), (90.0, tau - 120.0)]
+            else:
+                pairs = [(90.0, tau + 90.0), (90.0, tau - 90.0),
+                         (120.0, tau), (120.0, tau + 180.0)]
+        elif steric == 4:
+            pairs = [(TETRA, tau), (TETRA, tau + 120.0), (TETRA, tau - 120.0)]
         elif steric == 3:
-            beta, azimuths = 120.0, [tau, tau + 180.0]
+            pairs = [(120.0, tau), (120.0, tau + 180.0)]
         elif steric == 2:
-            beta, azimuths = 180.0, [tau]
+            pairs = [(180.0, tau)]
         else:
-            beta, azimuths = TETRA, [tau + k * 360.0 / max(n_new, 1)
-                                     for k in range(n_new)]
+            pairs = [(TETRA, tau + k * 360.0 / max(n_new, 1))
+                     for k in range(n_new)]
 
         directions = []
-        for azimuth in azimuths[:max(n_new, 1)]:
+        for beta, azimuth in pairs[:max(n_new, 1)]:
             n_hat = _unit(_rotate(m_hat, axis, azimuth))
             directions.append(_unit(math.cos(math.radians(beta)) * toward_parent
                                     + math.sin(math.radians(beta)) * n_hat))
@@ -643,6 +717,11 @@ class AdjacencyStructure:
     def _directions_many_anchors(self, j, anchored, n_new, steric, pos):
         """Directions when two or more neighbors of ``j`` are already placed
         (ring atoms, junctions): the local frame is fully determined."""
+        if steric >= 5:
+            raise AdjacencyListError(
+                "five-coordinate atom %d reached with %d placed neighbors; "
+                "only the single-anchor case is supported"
+                % (j, len(anchored)))
         units = [_unit(pos[n] - pos[j]) for n in anchored]
         if len(units) >= 3 or steric <= len(units) + 1:
             filler = -sum(units)
@@ -923,4 +1002,9 @@ class AdjacencyStructure:
                              % (i, j, info["note"], info["moves"]))
         else:
             lines.append("  no rotatable bonds")
+        for label, neighbors in sorted(self.hypervalent_atoms().items()):
+            lines.append("  five-coordinate %s%d: neighbors %s"
+                         % (self.element(label), label,
+                            ", ".join("%s%d" % (self.element(n), n)
+                                      for n in neighbors)))
         return "\n".join(lines)

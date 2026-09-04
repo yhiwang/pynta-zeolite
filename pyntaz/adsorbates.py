@@ -15,7 +15,7 @@ import os
 
 from ase.data import atomic_numbers, covalent_radii
 from ase.io import write
-from pynta.mol import get_adsorbate
+from .pynta_mol import get_adsorbate
 
 from . import config, runtree
 from .placement import place_monodentate, place_bidentate, orientation_stem

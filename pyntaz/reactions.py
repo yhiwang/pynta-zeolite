@@ -11,7 +11,7 @@ from collections import namedtuple
 
 import yaml
 from molecule.molecule import Molecule
-from pynta.mol import get_name
+from .pynta_mol import get_name
 
 # species:   {name: Molecule}           one per unique molecule
 # adjlists:  {name: adjacency list str} the same, serialised
