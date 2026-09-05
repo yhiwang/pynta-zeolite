@@ -114,3 +114,7 @@ TS_STRETCH_START = 0.4            # A, initial pull on the breaking bond
 TS_STRETCH_STEP = 0.2             # A, added per retry when the inserted gas still clashes
 TS_STRETCH_MAX = 2.0              # A, past this the guess is dissociated, not stretched
 TS_ROLL_STEPS = 24                # roll steps of the inserted gas about the forming-bond axis
+
+BARE_XYZ = "bare.xyz"
+FRAMEWORK_JSON = "framework.json"
+BIDENTATE_MAX_SPAN = 3.5

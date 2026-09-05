@@ -8,3 +8,9 @@ __pycache__/
 check_run/
 *.traj
 *.pyc
+*.egg-info/
+__pycache__/
+check_run/
+*.traj
+*.pyc
+runs/
