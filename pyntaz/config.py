@@ -118,3 +118,4 @@ TS_ROLL_STEPS = 24                # roll steps of the inserted gas about the for
 BARE_XYZ = "bare.xyz"
 FRAMEWORK_JSON = "framework.json"
 BIDENTATE_MAX_SPAN = 3.5
+TS_PAIR_MAX_SPAN = 3.5

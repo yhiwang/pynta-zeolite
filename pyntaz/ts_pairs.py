@@ -8,16 +8,17 @@ transition-state endpoint folders::
 
 Gas-phase species are not copied: a pair holds only the two surface
 endpoints, the gas names are recorded per side in the manifest and step 6
-reads their structures from the unique tree. (Flattening species identity
-into one ``gas.xyz`` broke as soon as a reaction had gas on both sides.)
+reads their structures from the unique tree.
 
-Pair folders are numbered rather than named after their endpoints: a stem is
-``degrees_045`` for a monodentate config and ``flip0_phi105_psi240`` for a
-bidentate one, so a composite name would be long and unparseable; the
+Pair folders are numbered rather than named after their endpoints; the
 manifest carries the mapping.
 
-Site pairing follows the X count of the reactant template: one X pairs the
-same site only, two X pair different sites only.
+Two pairing rules. The X count of the reactant template decides whether the
+two endpoints share a site folder (one X) or must differ (two X). On top of
+that the *span* -- the largest distance between any framework oxygen of the
+reactant site and any oxygen of the product site, read from framework.json
+-- must not exceed ``max_span``, so with several Al a reactant on one Al is
+never paired with a product on a distant one.
 """
 
 import json
@@ -25,6 +26,7 @@ import os
 import shutil
 
 from . import runtree
+from .placement import is_bidentate_stem
 from .reactions import molecule_from_adjlist, is_surface_species, count_surface_sites
 
 INITIAL_XYZ = "initial.xyz"
@@ -60,7 +62,25 @@ def split_side(names, adjlists, unique_tree):
     return surface[0], gas
 
 
-def build_reaction_pairs(reaction, adjlists, layout, verbose=True):
+def site_oxygens(framework, site, stem):
+    """Framework oxygen indices of one config: ``site`` indexes
+    ``mono_sites`` for a monodentate stem and ``bi_sites`` for a bidentate
+    one."""
+    if is_bidentate_stem(stem):
+        site_a, site_b = framework.bi_sites[int(site)]
+        return [site_a["indices"][0], site_b["indices"][0]]
+    return [framework.mono_sites[int(site)]["indices"][0]]
+
+
+def site_span(framework, oxygens_i, oxygens_f):
+    """Largest minimum-image distance between an oxygen of the initial site
+    and an oxygen of the final site."""
+    return max(float(framework.atoms.get_distance(i, j, mic=True))
+               for i in oxygens_i for j in oxygens_f)
+
+
+def build_reaction_pairs(reaction, adjlists, layout, framework, max_span,
+                         verbose=True):
     """Write ``<ts_guesses>/<index>_rxn/`` for one reaction. Returns the
     number of pairs written."""
     reaction_dir = os.path.join(layout.ts_guesses, "%d_rxn" % reaction["index"])
@@ -73,20 +93,27 @@ def build_reaction_pairs(reaction, adjlists, layout, verbose=True):
         reaction["product_names"], adjlists, layout.unique)
 
     if verbose:
-        print("\n[%d] %s   (%d X -> %s-site pairing)"
+        print("\n[%d] %s   (%d X -> %s-site pairing, span <= %.2f A)"
               % (reaction["index"], reaction["reaction"], n_sites,
-                 "same" if n_sites == 1 else "different"))
+                 "same" if n_sites == 1 else "different", max_span))
         print("  initial: %-20s %d configs   gas %s"
               % (initial_name, len(initial_configs), ", ".join(initial_gas) or "-"))
         print("  final:   %-20s %d configs   gas %s"
               % (final_name, len(final_configs), ", ".join(final_gas) or "-"))
 
     pairs = {}
+    n_far = 0
     for site_i, stem_i, path_i in initial_configs:
+        oxygens_i = site_oxygens(framework, site_i, stem_i)
         for site_f, stem_f, path_f in final_configs:
             if n_sites == 1 and site_i != site_f:
                 continue
             if n_sites == 2 and site_i == site_f:
+                continue
+            span = site_span(framework, oxygens_i,
+                             site_oxygens(framework, site_f, stem_f))
+            if span > max_span:
+                n_far += 1
                 continue
 
             key = "pair_%04d" % len(pairs)
@@ -95,23 +122,27 @@ def build_reaction_pairs(reaction, adjlists, layout, verbose=True):
             shutil.copy2(path_i, os.path.join(pair_dir, INITIAL_XYZ))
             shutil.copy2(path_f, os.path.join(pair_dir, FINAL_XYZ))
             pairs[key] = {"initial": {"species": initial_name,
-                                      "site": site_i, "stem": stem_i},
+                                      "site": site_i, "stem": stem_i,
+                                      "oxygens": oxygens_i},
                           "final": {"species": final_name,
-                                    "site": site_f, "stem": stem_f}}
+                                    "site": site_f, "stem": stem_f,
+                                    "oxygens": site_oxygens(framework, site_f, stem_f)},
+                          "span": round(span, 3)}
 
     record = dict(reaction)
     record["gas"] = {"initial": initial_gas, "final": final_gas}
+    record["max_span"] = max_span
     record["pairs"] = pairs
     with open(os.path.join(reaction_dir, REACTION_INFO), "w") as handle:
         json.dump(record, handle, indent=2)
 
     if verbose:
-        print("  %d endpoint pairs" % len(pairs))
+        print("  %d endpoint pairs, %d skipped for span" % (len(pairs), n_far))
     return len(pairs)
 
 
-def build_all_pairs(reaction_set, layout, verbose=True):
+def build_all_pairs(reaction_set, layout, framework, max_span, verbose=True):
     """Step 5 for every reaction; returns {reaction index: n_pairs}."""
-    return {reaction["index"]: build_reaction_pairs(reaction, reaction_set.adjlists,
-                                                    layout, verbose)
+    return {reaction["index"]: build_reaction_pairs(
+                reaction, reaction_set.adjlists, layout, framework, max_span, verbose)
             for reaction in reaction_set.reactions}

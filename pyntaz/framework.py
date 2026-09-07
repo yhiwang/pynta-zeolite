@@ -297,6 +297,13 @@ class ZeoliteFramework:
     def site_pairs(self, sites, max_span):
         return [(a, b) for a, b in combinations(sites, 2)
                 if self.span(a, b) <= max_span]
+    
+    def pair_records(self):
+        index_of = {id(site): i for i, site in enumerate(self.mono_sites)}
+        return [{"sites": [index_of[id(a)], index_of[id(b)]],
+                 "names": [a["site"], b["site"]],
+                 "span": round(self.span(a, b), 3)}
+                for a, b in self.bi_sites]
 
     def bridge_sites(self):
         """Midpoint geometry for each pair in ``bi_sites``: the span and the
@@ -333,8 +340,9 @@ class ZeoliteFramework:
             print("site %02d: %-7s O%-4d %s"
                   % (i, site["site"], site["indices"][0],
                      np.round(site["position"], 3)))
-        print("%d pairs within %.1f A" % (len(self.bi_sites), self.max_span))
-
+        for k, pair in enumerate(self.pair_records()):
+            print("pair %02d: %-7s %-7s %.2f A"
+                  % (k, pair["names"][0], pair["names"][1], pair["span"]))
     # -- disk -----------------------------------------------------------------
 
     def save(self, run_dir):
@@ -348,7 +356,8 @@ class ZeoliteFramework:
                   "max_span": float(self.max_span),
                   "t_sites": self.t_sites,
                   "o_sites": self.o_sites,
-                  "mono_sites": [_site_to_json(site) for site in self.mono_sites]}
+                  "mono_sites": [_site_to_json(site) for site in self.mono_sites],
+                  "bi_sites": self.pair_records()}
         with open(os.path.join(run_dir, config.FRAMEWORK_JSON), "w") as handle:
             json.dump(record, handle, indent=2)
 
@@ -408,7 +417,8 @@ def load_framework(run_dir):
                                  record["t_sites"], record["o_sites"])
     framework.max_span = record["max_span"]
     framework.mono_sites = [_site_from_json(site) for site in record["mono_sites"]]
-    framework.bi_sites = framework.site_pairs(framework.mono_sites, framework.max_span)
+    framework.bi_sites = [(framework.mono_sites[i], framework.mono_sites[j])
+                          for i, j in (pair["sites"] for pair in record["bi_sites"])]
     return framework
 
 
