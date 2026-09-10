@@ -1,27 +1,36 @@
 """Step 3 of the workflow: keep the relaxed configs that held together, then
 deduplicate them.
 
-*Survival* compares the first and last frame of ``relax.traj`` and keeps a
+*Survival* compares the first and last frame of a relaxation and keeps a
 config only if every bond inside the adsorbate, plus the binder-to-framework
-bond, changed by less than :data:`config.BOND_CHANGE_THRESHOLD`.
+bond, changed by less than ``BOND_CHANGE_THRESHOLD``.
 
 *Deduplication* clusters the survivors of each (species, site) by
 positional RMSD of the adsorbate atoms and keeps the lowest-energy member of
 each cluster.
 """
 
-import os
-
-from ase.io.trajectory import Trajectory
-
-from . import config, runtree
 from .geometry import (framework_indices, adsorbate_indices, neighbor_list,
                        bonded_neighbors, nearest_atom, positional_rmsd)
+
+BOND_CHANGE_THRESHOLD = 0.5     # A, a bond that moved more than this has broken
+RMSD_THRESHOLD = 2.0            # A, below this two relaxed configs are the same minimum
 
 
 # --------------------------------------------------------------------------
 # bond map of the adsorbate
 # --------------------------------------------------------------------------
+
+def binder_indices(info, n_framework=None):
+    """Absolute indices of the binding atoms in a combined structure
+    (framework atoms first, then the adsorbate), from the species record of
+    :func:`pyntaz.adsorbates.species_info`. ``n_framework`` defaults to
+    ``info["nslab"]``; pass the count found by connectivity when you have it."""
+    if n_framework is None:
+        n_framework = info["nslab"]
+    return sorted(n_framework + int(k)
+                  for k in info["gratom_to_molecule_surface_atom_map"])
+
 
 def adsorbate_bond_map(atoms, binders, mult=1.2):
     """{adsorbate index: [bonded neighbor indices]} for every adsorbate atom.
@@ -32,8 +41,8 @@ def adsorbate_bond_map(atoms, binders, mult=1.2):
     inside covalent range of a framework O, and relaxation pushing it back
     out would read as a bond breaking. The exception is each *binder*, which
     additionally gets its single nearest framework atom -- and ``binders``
-    comes from ``info.json``, never from geometry, because a clashing guess
-    can put a tail atom as close to the wall as the binder is.
+    comes from the species record, never from geometry, because a clashing
+    guess can put a tail atom as close to the wall as the binder is.
     """
     nl = neighbor_list(atoms, mult=mult, skin=0.0)
     framework = framework_indices(atoms)
@@ -50,8 +59,7 @@ def adsorbate_bond_map(atoms, binders, mult=1.2):
     return bond_map
 
 
-def bonds_survived(initial, relaxed, bond_map,
-                   threshold=config.BOND_CHANGE_THRESHOLD):
+def bonds_survived(initial, relaxed, bond_map, threshold=BOND_CHANGE_THRESHOLD):
     """(survived, broken) -- ``broken`` lists (i, j, d_initial, d_relaxed,
     change) for every bond that moved more than ``threshold``, largest
     change first.
@@ -72,14 +80,10 @@ def bonds_survived(initial, relaxed, bond_map,
     return not broken, broken
 
 
-def config_survived(config_dir, info, threshold=config.BOND_CHANGE_THRESHOLD):
-    """Whether the relaxation in ``config_dir`` kept every bond. A trajectory
-    with fewer than two frames is a job that died before it moved."""
-    trajectory = Trajectory(os.path.join(config_dir, config.RELAX_TRAJECTORY))
-    if len(trajectory) < 2:
-        return False
-    initial, relaxed = trajectory[0], trajectory[-1]
-    binders = runtree.binder_indices(info, len(framework_indices(initial)))
+def relaxation_survived(initial, relaxed, binders, threshold=BOND_CHANGE_THRESHOLD):
+    """Whether a relaxation from ``initial`` to ``relaxed`` kept every bond of
+    the adsorbate (``binders`` are the absolute indices of its binding
+    atoms, see :func:`adsorbates.binder_indices`)."""
     survived, _ = bonds_survived(initial, relaxed,
                                  adsorbate_bond_map(initial, binders), threshold)
     return survived
@@ -97,7 +101,7 @@ def sort_by_energy(entries):
                                               entry[0]))
 
 
-def cluster_by_rmsd(entries, threshold=config.RMSD_THRESHOLD):
+def cluster_by_rmsd(entries, threshold=RMSD_THRESHOLD):
     """[(representative, [members])] by greedy clustering on adsorbate RMSD.
 
     ``entries`` is ``[(stem, atoms, energy)]`` already energy-ordered, so

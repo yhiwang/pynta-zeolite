@@ -10,42 +10,56 @@ import os
 import shutil
 import sys
 
-from _common import config
-from pyntaz import runtree
-from pyntaz.filtering import config_survived, sort_by_energy, cluster_by_rmsd
+import _common  # noqa: F401
+import layout
+import settings
+from ase.io.trajectory import Trajectory
+from pyntaz.filtering import (binder_indices, relaxation_survived, sort_by_energy,
+                              cluster_by_rmsd)
+from pyntaz.geometry import framework_indices
 
-RUN_DIR = os.path.join("runs", "MOR_T2-T4_5.65")
+
+def survived(config_dir, info):
+    """Whether the relaxation in ``config_dir`` kept every bond. A trajectory
+    with fewer than two frames is a job that died before it moved."""
+    trajectory = Trajectory(os.path.join(config_dir, layout.RELAX_TRAJECTORY))
+    if len(trajectory) < 2:
+        return False
+    initial, relaxed = trajectory[0], trajectory[-1]
+    binders = binder_indices(info, len(framework_indices(initial)))
+    return relaxation_survived(initial, relaxed, binders,
+                               threshold=settings.BOND_CHANGE_THRESHOLD)
 
 
-layout = config.RunLayout(RUN_DIR)
+run = layout.RunLayout(settings.RUN_DIR)
 
-if not os.path.isdir(layout.relaxed):
-    sys.exit("%s not found -- run step 2 first" % layout.relaxed)
+if not os.path.isdir(run.relaxed):
+    sys.exit("%s not found -- run step 2 first" % run.relaxed)
 
-for species, species_dir in runtree.species_dirs(layout.relaxed):
-    if not os.path.isfile(runtree.species_info_path(layout.adsorbates, species)):
-        print("%s: no info.json in %s" % (species, layout.adsorbates))
+for species, species_dir in layout.species_dirs(run.relaxed):
+    if not os.path.isfile(layout.species_info_path(run.adsorbates, species)):
+        print("%s: no info.json in %s" % (species, run.adsorbates))
         continue
-    info = runtree.load_species_info(layout.adsorbates, species)
+    info = layout.load_species_info(run.adsorbates, species)
 
-    configs = runtree.config_dirs(species_dir)
+    configs = layout.config_dirs(species_dir)
     if not configs:
         continue
     print("\n%s" % species)
 
     survivors_by_site, failed_by_site = {}, {}
     for site, stem, config_dir in configs:
-        relaxed_xyz = os.path.join(config_dir, config.RELAXED_STRUCTURE)
-        if not os.path.isfile(relaxed_xyz) or not config_survived(config_dir, info):
+        relaxed_xyz = os.path.join(config_dir, layout.RELAXED_STRUCTURE)
+        if not os.path.isfile(relaxed_xyz) or not survived(config_dir, info):
             failed_by_site.setdefault(site, []).append(stem)
             continue
 
-        filtered_dir = os.path.join(layout.filtered, species, site)
+        filtered_dir = os.path.join(run.filtered, species, site)
         os.makedirs(filtered_dir, exist_ok=True)
         filtered_xyz = os.path.join(filtered_dir, stem + ".xyz")
         shutil.copy2(relaxed_xyz, filtered_xyz)
 
-        atoms, energy = runtree.read_with_energy(filtered_xyz)
+        atoms, energy = layout.read_with_energy(filtered_xyz)
         survivors_by_site.setdefault(site, []).append((stem, atoms, energy))
 
     for site in sorted(set(survivors_by_site) | set(failed_by_site)):
@@ -55,15 +69,16 @@ for species, species_dir in runtree.species_dirs(layout.relaxed):
             print("  site %s: 0/%d survived" % (site, n_total))
             continue
 
-        clusters = cluster_by_rmsd(sort_by_energy(survivors))
+        clusters = cluster_by_rmsd(sort_by_energy(survivors),
+                                   threshold=settings.RMSD_THRESHOLD)
         print("  site %s: %d/%d survived -> %d unique"
               % (site, len(survivors), n_total, len(clusters)))
 
-        unique_dir = os.path.join(layout.unique, species, site)
+        unique_dir = os.path.join(run.unique, species, site)
         os.makedirs(unique_dir, exist_ok=True)
         for representative, members in clusters:
             stem, _, energy = representative
-            shutil.copy2(os.path.join(layout.filtered, species, site, stem + ".xyz"),
+            shutil.copy2(os.path.join(run.filtered, species, site, stem + ".xyz"),
                          os.path.join(unique_dir, stem + ".xyz"))
             merged = "" if len(members) == 1 else \
                 "  <- %s" % ", ".join(member[0] for member in members[1:])
@@ -71,5 +86,5 @@ for species, species_dir in runtree.species_dirs(layout.relaxed):
                   % (stem, "E=%.3f eV" % energy if energy is not None else "no E",
                      merged))
 
-    for tree in (layout.filtered, layout.unique):
-        runtree.copy_species_info(layout.adsorbates, tree, species)
+    for tree in (run.filtered, run.unique):
+        layout.copy_species_info(run.adsorbates, tree, species)

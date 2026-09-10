@@ -21,8 +21,14 @@ import re
 
 import numpy as np
 
-from . import config
 from .geometry import (neighbor_list, min_clearance, rotate_vector, unit)
+
+# sweep sizes
+MONODENTATE_ANGLES = 24     # spin steps about the site normal (15 deg)
+BIDENTATE_PHI_STEPS = 24    # swing about the O-O axis (15 deg)
+BIDENTATE_PSI_STEPS = 12    # roll about the binder-binder axis (30 deg)
+
+GAS_STEM = "gas"            # the one "orientation" of a gas-phase molecule
 
 _MONO_STEM = re.compile(r"^degrees_(\d+)$")
 _BI_STEM = re.compile(r"^flip(\d)_phi(\d+)_psi(\d+)$")
@@ -41,7 +47,7 @@ def orientation_stem(tag):
     to whole degrees never collides. A gas-phase (empty) tag gives ``gas``.
     """
     if not tag:
-        return config.GAS_STEM
+        return GAS_STEM
     if "angle" in tag:
         return "degrees_%03d" % round(tag["angle"])
     return "flip%d_phi%03d_psi%03d" % (int(tag["flip"]),
@@ -51,7 +57,7 @@ def orientation_stem(tag):
 def parse_orientation_stem(stem):
     """Tag dict from a stem: {"angle": 45} / {"flip": 0, "phi": 105,
     "psi": 240} / {} for gas, or None when the stem is not recognised."""
-    if stem == config.GAS_STEM:
+    if stem == GAS_STEM:
         return {}
     match = _MONO_STEM.match(stem)
     if match:
@@ -180,7 +186,7 @@ def _keep_best(trials, tags, scores, best_only):
 
 def place_monodentate(framework, adsorbate, binder, site, bond_length,
                       neighbor_indices=None,
-                      n_angles=config.MONODENTATE_ANGLES, best_only=True):
+                      n_angles=MONODENTATE_ANGLES, best_only=True):
     """Bind ``adsorbate`` atom ``binder`` on ``site`` and spin it about the
     site normal.
 
@@ -238,8 +244,7 @@ def place_monodentate(framework, adsorbate, binder, site, bond_length,
 
 
 def place_bidentate(framework, adsorbate, binders, sites, bond_lengths,
-                    n_phi=config.BIDENTATE_PHI_STEPS,
-                    n_psi=config.BIDENTATE_PSI_STEPS,
+                    n_phi=BIDENTATE_PHI_STEPS, n_psi=BIDENTATE_PSI_STEPS,
                     try_flip=True, best_only=True):
     """Bridge ``adsorbate`` across two framework oxygens.
 

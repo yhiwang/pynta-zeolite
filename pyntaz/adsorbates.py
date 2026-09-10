@@ -1,25 +1,35 @@
-"""Step 1 of the workflow: put every species of the reaction set on every
-site of the framework and write the initial guesses.
+"""Step 1 of the workflow: put one species of the reaction set on every site
+of the framework it fits and hand back the initial guesses.
 
-Output layout (see :mod:`pyntaz.runtree`)::
+A monodentate species (one X in its adjacency list) goes on every entry of
+``framework.mono_sites``, a bidentate one (two X) on every pair in
+``framework.bi_sites``; a gas-phase species (no X) is just centred in a box.
+Each guess comes with a *tag* (see :mod:`pyntaz.placement`) naming its
+orientation and the clearance score it was ranked by.
 
-    <run_dir>/Adsorbates/<species>/<site>/<stem>/<stem>_init.xyz
-    <run_dir>/Adsorbates/<species>/info.json
-
-``<site>`` is the zero-padded index into ``framework.mono_sites`` (or
-``bi_sites``), ``<stem>`` the orientation (``degrees_045``,
-``flip0_phi105_psi240``) and ``0/gas`` for a gas-phase molecule.
+:func:`species_info` builds the bookkeeping record that later steps need to
+map molecule atoms onto atoms of a stored structure (read back by
+:func:`pyntaz.filtering.binder_indices`); how and where that record is
+stored is up to the caller.
 """
 
-import os
+from collections import namedtuple
 
 from ase.data import atomic_numbers, covalent_radii
-from ase.io import write
-from .pynta_mol import get_adsorbate
 
-from . import config, runtree
-from .placement import place_monodentate, place_bidentate, orientation_stem
+from .placement import place_monodentate, place_bidentate
+from .pynta_mol import get_adsorbate
 from .reactions import surface_atom_indices
+
+GAS_VACUUM = 10.0       # A of vacuum around a gas-phase molecule
+
+# structures:       [ase.Atoms] framework + adsorbate (or the bare gas molecule)
+# site_ids:         [int or None] index into mono_sites / bi_sites, None for gas
+# tags:             [dict] orientation tag of each structure (+ "site_indices")
+# scores:           [float] tail clearance of each structure, A
+# mol_to_atoms_map: {molecule atom index: adsorbate atom index}
+SpeciesGuesses = namedtuple("SpeciesGuesses",
+                            "structures site_ids tags scores mol_to_atoms_map")
 
 
 def estimate_bond_length(framework_atoms, adsorbate, site, binder):
@@ -32,32 +42,25 @@ def estimate_bond_length(framework_atoms, adsorbate, site, binder):
 
 def place_on_sites(adsorbate, framework_atoms, binders, sites):
     """Full orientation sweep of ``adsorbate`` on one site (or site pair).
-    Returns (structures, tags)."""
+    Returns (structures, tags, scores)."""
     if len(binders) == 1:
         bond_length = estimate_bond_length(framework_atoms, adsorbate,
                                            sites[0], binders[0])
-        structures, tags, scores = place_monodentate(
-            framework_atoms, adsorbate, binders[0], sites[0], bond_length,
-            best_only=False)
-    else:
-        bond_lengths = (estimate_bond_length(framework_atoms, adsorbate,
-                                             sites[0], binders[0]),
-                        estimate_bond_length(framework_atoms, adsorbate,
-                                             sites[1], binders[1]))
-        structures, tags, scores = place_bidentate(
-            framework_atoms, adsorbate, binders, sites, bond_lengths,
-            best_only=False)
-
-    label = "-".join("O%d" % site["indices"][0] for site in sites)
-    print("  %-12s %3d orientations  tail clearance %.2f-%.2f A"
-          % (label, len(structures), min(scores), max(scores)))
-    return structures, tags
+        return place_monodentate(framework_atoms, adsorbate, binders[0], sites[0],
+                                 bond_length, best_only=False)
+    bond_lengths = (estimate_bond_length(framework_atoms, adsorbate,
+                                         sites[0], binders[0]),
+                    estimate_bond_length(framework_atoms, adsorbate,
+                                         sites[1], binders[1]))
+    return place_bidentate(framework_atoms, adsorbate, binders, sites,
+                           bond_lengths, best_only=False)
 
 
 def generate_guesses(mol, adsorbate, framework, mol_to_atoms_map):
-    """(structures, site_ids, tags) over every site the species fits:
-    monodentate species go on ``framework.mono_sites``, bidentate on
-    ``framework.bi_sites``."""
+    """(structures, site_ids, tags, scores) over every site the species
+    fits: monodentate species go on ``framework.mono_sites``, bidentate on
+    ``framework.bi_sites``. Every tag also records the framework oxygen
+    indices of its site as ``site_indices``."""
     binders = [mol_to_atoms_map[i] for i in surface_atom_indices(mol)]
 
     if len(binders) == 1:
@@ -68,72 +71,59 @@ def generate_guesses(mol, adsorbate, framework, mol_to_atoms_map):
         raise ValueError("only monodentate and bidentate are supported, got %d"
                          % len(binders))
 
-    structures, site_ids, tags = [], [], []
+    structures, site_ids, tags, scores = [], [], [], []
     for site_id, sites in enumerate(sites_lists):
-        placed, placed_tags = place_on_sites(adsorbate, framework.atoms,
-                                             binders, sites)
-        for structure, tag in zip(placed, placed_tags):
+        placed, placed_tags, placed_scores = place_on_sites(
+            adsorbate, framework.atoms, binders, sites)
+        for structure, tag, score in zip(placed, placed_tags, placed_scores):
             structures.append(structure)
             site_ids.append(site_id)
             tag = dict(tag)
             tag["site_indices"] = [int(site["indices"][0]) for site in sites]
             tags.append(tag)
-    return structures, site_ids, tags
+            scores.append(score)
+    return structures, site_ids, tags, scores
 
 
-def write_species_guesses(mol, name, run_dir, framework):
-    """Write every initial guess for one species and its ``info.json``.
+def species_guesses(mol, framework, gas_vacuum=GAS_VACUUM):
+    """Every initial guess for one species as a :class:`SpeciesGuesses`.
 
-    If the species folder already exists it is reused untouched and the
-    existing xyz files are returned. Returns the list of xyz paths.
+    The 3D adsorbate comes from pynta's ``get_adsorbate`` (an RDKit
+    conformer of the desorbed molecule). A gas-phase species gives a single
+    structure, centred in ``gas_vacuum`` A of vacuum with the framework's
+    periodicity, tagged ``{}`` with ``site_id`` None.
     """
-    layout = config.RunLayout(run_dir)
-    species_dir = os.path.join(layout.adsorbates, name)
-    if os.path.exists(species_dir):
-        print("%s: reusing %s" % (name, species_dir))
-        return [path for _, path in runtree.initial_guess_files(species_dir)]
-
     adsorbate, mol_to_atoms_map = get_adsorbate(mol)
 
     if not mol.get_surface_sites():
         adsorbate.pbc = framework.atoms.pbc
-        adsorbate.center(vacuum=config.GAS_VACUUM)
-        structures, site_ids, tags = [adsorbate], [None], [{}]
-    else:
-        print("\n%s" % name)
-        structures, site_ids, tags = generate_guesses(mol, adsorbate, framework,
-                                                      mol_to_atoms_map)
+        adsorbate.center(vacuum=gas_vacuum)
+        return SpeciesGuesses([adsorbate], [None], [{}], [0.0], mol_to_atoms_map)
 
-    binder_to_mol_atom = {}
-    for i, atom in enumerate(mol.atoms):
-        if atom.is_bonded_to_surface():
-            binder_to_mol_atom[mol_to_atoms_map[i]] = i
+    structures, site_ids, tags, scores = generate_guesses(
+        mol, adsorbate, framework, mol_to_atoms_map)
+    return SpeciesGuesses(structures, site_ids, tags, scores, mol_to_atoms_map)
 
-    xyz_paths, manifest = [], {}
-    for structure, site_id, tag in zip(structures, site_ids, tags):
-        if site_id is None:
-            relative = os.path.join("0", config.GAS_STEM)
-        else:
-            relative = os.path.join("%02d" % site_id, orientation_stem(tag))
-        config_dir = os.path.join(species_dir, relative)
-        os.makedirs(config_dir, exist_ok=True)
-        xyz = os.path.join(config_dir,
-                           os.path.basename(relative) + config.INITIAL_GUESS_SUFFIX)
-        write(xyz, structure)
-        xyz_paths.append(xyz)
-        manifest[relative] = tag
 
-    info = {"name": name,
+# --------------------------------------------------------------------------
+# the species record
+# --------------------------------------------------------------------------
+
+def species_info(name, mol, mol_to_atoms_map, n_framework, configs):
+    """The bookkeeping record of one species, json-able.
+
+    Keys: ``name``; ``adjlist``; ``atom_to_molecule_atom_map`` (adsorbate
+    index -> molecule index); ``gratom_to_molecule_surface_atom_map``
+    (adsorbate index of each binder -> molecule index); ``nslab`` (framework
+    atom count, the adsorbate starts after it in every combined structure);
+    ``configs`` ({config key: tag}, as given).
+    """
+    binder_to_mol_atom = {mol_to_atoms_map[i]: i
+                          for i, atom in enumerate(mol.atoms)
+                          if atom.is_bonded_to_surface()}
+    return {"name": name,
             "adjlist": mol.to_adjacency_list(),
             "atom_to_molecule_atom_map": {v: k for k, v in mol_to_atoms_map.items()},
             "gratom_to_molecule_surface_atom_map": binder_to_mol_atom,
-            "nslab": len(framework.atoms),
-            "configs": manifest}
-    runtree.write_species_info(layout.adsorbates, name, info)
-    return xyz_paths
-
-
-def write_all_guesses(reaction_set, run_dir, framework):
-    """{species name: [xyz paths]} for every species in the reaction set."""
-    return {name: write_species_guesses(mol, name, run_dir, framework)
-            for name, mol in reaction_set.species.items()}
+            "nslab": n_framework,
+            "configs": configs}

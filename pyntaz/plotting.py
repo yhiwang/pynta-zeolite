@@ -4,9 +4,12 @@ figure per species.
 Monodentate species give energy vs spin angle, one column per site;
 bidentate species give a phi/psi heat map, one panel per (site pair, flip).
 Survivors of the filter step are ringed / outlined.
+
+The figure functions take ``energies`` = {site: {stem: (e_initial,
+e_relaxed)}} and ``survivors`` = {site: {stem}}; collecting those from a
+run directory is the caller's job.
 """
 
-import os
 import re
 
 import numpy as np
@@ -14,58 +17,26 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from . import config, runtree
-from .placement import parse_orientation_stem, is_monodentate_stem, is_bidentate_stem
+from .placement import (GAS_STEM, parse_orientation_stem, is_monodentate_stem,
+                        is_bidentate_stem)
 
 # "BFGS:   12 15:04:11   -2274.123456   0.0345"
 _OPTIMIZER_ROW = re.compile(
     r"^\s*\w+:\s+(\d+)\s+\S+\s+([-+]?\d+\.\d+)\s+([-+]?\d+\.\d+)\s*$")
 
 
-# --------------------------------------------------------------------------
-# reading
-# --------------------------------------------------------------------------
-
-def read_relax_log(path):
-    """(first energy, last energy) from an ASE optimizer log, or
-    (None, None) if it has no parsable rows. Any optimizer prefix works;
-    restart headers, blank lines and warnings are ignored."""
+def parse_optimizer_log(lines):
+    """(first energy, last energy) from the lines of an ASE optimizer log,
+    or (None, None) if none parse. Any optimizer prefix works; restart
+    headers, blank lines and warnings are ignored."""
     energies = []
-    with open(path) as handle:
-        for line in handle:
-            match = _OPTIMIZER_ROW.match(line)
-            if match:
-                energies.append(float(match.group(2)))
+    for line in lines:
+        match = _OPTIMIZER_ROW.match(line)
+        if match:
+            energies.append(float(match.group(2)))
     if not energies:
         return None, None
     return energies[0], energies[-1]
-
-
-def collect_energies(species_relax_dir):
-    """({site: {stem: (e_initial, e_relaxed)}}, [unparsable logs])."""
-    energies, skipped = {}, []
-    for site, site_path in runtree.site_dirs(species_relax_dir):
-        for stem in sorted(os.listdir(site_path)):
-            log = os.path.join(site_path, stem, config.RELAX_LOG)
-            if not os.path.isfile(log):
-                continue
-            e_initial, e_relaxed = read_relax_log(log)
-            if e_initial is None:
-                skipped.append(log)
-                continue
-            energies.setdefault(site, {})[stem] = (e_initial, e_relaxed)
-    return energies, skipped
-
-
-def collect_survivors(species_filtered_dir):
-    """{site: {stem}} that survived filtering; empty when the filter has not
-    run yet, which just leaves the plots unmarked."""
-    survivors = {}
-    if not os.path.isdir(species_filtered_dir):
-        return survivors
-    for site, site_path in runtree.site_dirs(species_filtered_dir):
-        survivors[site] = runtree.stems_in(site_path)
-    return survivors
 
 
 # --------------------------------------------------------------------------
@@ -187,7 +158,7 @@ def plot_species_sweep(name, energies, survivors, out_path):
     figure kind ("mono" / "bi"), "gas" when there is nothing to plot, or
     None when the stems are mixed."""
     stems = [stem for site in energies for stem in energies[site]]
-    if all(stem == config.GAS_STEM for stem in stems):
+    if all(stem == GAS_STEM for stem in stems):
         return "gas"
     if all(is_monodentate_stem(stem) for stem in stems):
         plot_monodentate(name, energies, survivors, out_path)

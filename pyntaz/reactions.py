@@ -1,10 +1,12 @@
-"""Read ``reaction.yaml`` into RMG molecules.
+"""Turn the text of ``reaction.yaml`` into RMG molecules.
 
 The yaml holds reactions (RMG adjacency lists for the whole reactant and
 product side, ``X`` marking a framework site) and, optionally, standalone
 species. Every distinct molecule that appears on any side becomes a species
 named by pynta's ``get_name`` (e.g. ``C[CH2][Pt]``); each reaction records
 which species make up its sides.
+
+Only the *text* is handled here; reading the file is the caller's job.
 """
 
 from collections import namedtuple
@@ -53,11 +55,10 @@ def surface_atom_indices(mol):
 # yaml -> ReactionSet
 # --------------------------------------------------------------------------
 
-def read_reactions_yaml(path):
-    """(reactions, standalone species) records from the yaml. Reactions get
-    an ``index`` in file order."""
-    with open(path) as handle:
-        records = yaml.safe_load(handle)
+def parse_reactions(text):
+    """(reactions, standalone species) records from the yaml text.
+    Reactions get an ``index`` in file order."""
+    records = yaml.safe_load(text)
     reactions = [record for record in records if "reactant" in record]
     species = [record for record in records if "reactant" not in record]
     for i, reaction in enumerate(reactions):
@@ -119,7 +120,7 @@ def build_reaction_set(reactions, standalone_species,
     return ReactionSet(species, adjlists, reactions)
 
 
-def load_reaction_set(path, thermodynamic_references=False):
-    """``read_reactions_yaml`` + ``build_reaction_set`` in one call."""
-    reactions, standalone = read_reactions_yaml(path)
+def reaction_set_from_yaml(text, thermodynamic_references=False):
+    """``parse_reactions`` + ``build_reaction_set`` in one call."""
+    reactions, standalone = parse_reactions(text)
     return build_reaction_set(reactions, standalone, thermodynamic_references)

@@ -10,25 +10,41 @@ and ``build_framework(code, t_labels, indices=...)`` builds the one you
 pick. Without ``indices`` a second label means its nearest second-order
 neighbour.
 
-``save`` / ``load_framework`` round-trip through <run_dir>/bare.xyz +
-framework.json so every later step reads the same atoms and the same site
-list. Sites are plain dicts so they can be dumped to json unchanged.
+Sites follow a *site rule*, chosen per framework and stored with it:
+
+* ``"all"``   every first-shell oxygen of every Al is a monodentate site and
+              every two of them within ``max_span`` form a pair -- a two-Al
+              framework then also carries everything a single-Al run does;
+* ``"cross"`` with two Al only the *cross* pairs count -- one oxygen on each
+              Al, i.e. the O-Si-O bridges between them -- and only their
+              oxygens are monodentate sites, for when the single-Al chemistry
+              is already covered by that Al's own run. A single-Al framework
+              has no cross pairs, so there the rule behaves like ``"all"``.
+
+``to_dict`` / ``from_dict`` round-trip everything except the atoms
+themselves (the caller keeps those as an xyz file next to the json) so
+every later step reads the same atoms and the same site list. Sites are
+plain dicts so they can be dumped to json unchanged.
+
+maze reads ``./data/<code>.cif`` if it exists and downloads it from the IZA
+database otherwise, so keep ``data/`` next to where you run.
 """
 
-import json
-import os
 from itertools import combinations
 
 import numpy as np
 import ase
-from ase.io import read, write
 from ase.neighborlist import NeighborList, natural_cutoffs
 from maze.zeolite import Zeolite
 
-from . import config
 from .geometry import unit
 
 T_SYMBOLS = ("Si", "Al")
+
+SUPERCELL_MIN_LENGTH = 12.0     # A, repeat the unit cell until every edge is at least this
+SITE_PAIR_MAX_SPAN = 3.5        # A, longest O-O distance that still counts as a site pair
+SITE_RULES = ("all", "cross")   # see the module docstring
+DEFAULT_SITE_RULE = "all"
 
 
 # --------------------------------------------------------------------------
@@ -46,7 +62,7 @@ def split_site_labels(zeolite):
     return t_sites, o_sites
 
 
-def make_supercell(zeolite, min_length=config.SUPERCELL_MIN_LENGTH):
+def make_supercell(zeolite, min_length=SUPERCELL_MIN_LENGTH):
     """(supercell Atoms, repeats) with every cell edge >= ``min_length``."""
     repeats = [int(np.ceil(min_length / length))
                for length in zeolite.cell.cellpar()[:3]]
@@ -113,12 +129,13 @@ class ZeoliteFramework:
     repeats : list      supercell repeats
     t_sites, o_sites    {label: [supercell indices]}
     max_span : float    longest O-O distance kept in ``bi_sites``
-    mono_sites : list   [site dict] one per first-shell oxygen of every Al
+    site_rule : str     "all" or "cross", see the module docstring
+    mono_sites : list   [site dict] the monodentate sites (first-shell oxygens)
     bi_sites : list     [(site, site)] pairs of mono sites within max_span
     """
 
     def __init__(self, code, atoms, t_labels, al_indices, repeats,
-                 t_sites, o_sites):
+                 t_sites, o_sites, site_rule=DEFAULT_SITE_RULE):
         self.code = code
         self.atoms = atoms
         self.t_labels = list(t_labels)
@@ -126,9 +143,17 @@ class ZeoliteFramework:
         self.repeats = repeats
         self.t_sites = t_sites
         self.o_sites = o_sites
-        self.max_span = config.BIDENTATE_MAX_SPAN
+        self.max_span = SITE_PAIR_MAX_SPAN
+        self.site_rule = self._check_rule(site_rule)
         self.mono_sites = []
         self.bi_sites = []
+
+    @staticmethod
+    def _check_rule(site_rule):
+        if site_rule not in SITE_RULES:
+            raise ValueError("site_rule must be one of %s, got %r"
+                             % (SITE_RULES, site_rule))
+        return site_rule
 
     # -- connectivity --------------------------------------------------------
 
@@ -295,9 +320,10 @@ class ZeoliteFramework:
         return float(np.linalg.norm(site_b["position"] - site_a["position"]))
 
     def site_pairs(self, sites, max_span):
+        """[(site, site)] over every pair of ``sites`` closer than ``max_span``."""
         return [(a, b) for a, b in combinations(sites, 2)
                 if self.span(a, b) <= max_span]
-    
+
     def pair_records(self):
         index_of = {id(site): i for i, site in enumerate(self.mono_sites)}
         return [{"sites": [index_of[id(a)], index_of[id(b)]],
@@ -323,46 +349,122 @@ class ZeoliteFramework:
             })
         return sites
 
-    def find_sites(self, max_span=config.BIDENTATE_MAX_SPAN):
-        """Fill ``mono_sites`` and ``bi_sites``; returns self."""
+    def is_cross_pair(self, site_a, site_b):
+        """Whether two sites sit on different Al atoms."""
+        return site_a["al_index"] != site_b["al_index"]
+
+    def cross_only(self, site_rule=None):
+        """Whether the cross rule is in force: rule "cross" *and* more than
+        one Al (a single Al has no cross pairs to restrict to)."""
+        rule = self.site_rule if site_rule is None else self._check_rule(site_rule)
+        return rule == "cross" and len(self.al_indices) > 1
+
+    def find_pairs(self, max_span=SITE_PAIR_MAX_SPAN, sites=None, site_rule=None):
+        """[(site, site)] within ``max_span`` by the site rule (the
+        framework's own unless ``site_rule`` is given).
+
+        "all": any two of ``sites`` (default: every first-shell oxygen).
+        "cross" with several Al: only pairs with one oxygen on each of two
+        different Al; within the default span that leaves the O-Si-O
+        bridges between the Al.
+        """
+        sites = self.monodentate_sites() if sites is None else sites
+        pairs = self.site_pairs(sites, max_span)
+        if self.cross_only(site_rule):
+            pairs = [(a, b) for a, b in pairs if self.is_cross_pair(a, b)]
+        return pairs
+
+    def find_sites(self, max_span=SITE_PAIR_MAX_SPAN, site_rule=None):
+        """Fill ``mono_sites`` and ``bi_sites`` by the site rule (setting
+        the framework's rule when ``site_rule`` is given); returns self.
+
+        "all": every first-shell oxygen is a site. "cross" with several
+        Al: only the oxygens taking part in a cross pair (:meth:`find_pairs`)
+        are sites, so monodentate species land where the two-Al chemistry
+        happens and nowhere a single-Al run already put them.
+        """
+        if site_rule is not None:
+            self.site_rule = self._check_rule(site_rule)
         self.max_span = max_span
-        self.mono_sites = self.monodentate_sites()
-        self.bi_sites = self.site_pairs(self.mono_sites, max_span)
+        oxygens = self.monodentate_sites()
+        self.bi_sites = self.find_pairs(max_span, oxygens)
+        if self.cross_only():
+            if not self.bi_sites:
+                raise ValueError("no cross pair within %.2f A between Al %s -- "
+                                 "widen max_span or use site_rule='all'"
+                                 % (max_span, self.al_indices))
+            used = {id(site) for pair in self.bi_sites for site in pair}
+            oxygens = [site for site in oxygens if id(site) in used]
+        self.mono_sites = oxygens
         return self
 
-    def describe(self):
+    def bridging_si(self, site_a, site_b, nl=None):
+        """Si atoms bonded to both oxygens of a pair -- the Si of an O-Si-O
+        bridge between two Al. [] for a same-Al pair (they share only
+        their Al) or when the oxygens share nothing."""
+        nl = nl or self._neighbor_list()
+        shared = (set(self.bonded(site_a["indices"][0], T_SYMBOLS, nl))
+                  & set(self.bonded(site_b["indices"][0], T_SYMBOLS, nl)))
+        return sorted(shared - set(self.al_indices))
+
+    def report(self):
+        """Human-readable summary: the Al atoms and every site and pair."""
+        nl = self._neighbor_list()
+        lines = []
         for al_index, label in zip(self.al_indices, self.t_labels):
-            print("Al %s at index %d" % (label, al_index))
+            lines.append("Al %s at index %d" % (label, al_index))
         for a, b in combinations(self.al_indices, 2):
-            print("Al-Al %d-%d  %.2f A"
-                  % (a, b, self.atoms.get_distance(a, b, mic=True)))
+            lines.append("Al-Al %d-%d  %.2f A"
+                         % (a, b, self.atoms.get_distance(a, b, mic=True)))
+        if len(self.al_indices) > 1:
+            lines.append("site rule %r: %s" % (self.site_rule, (
+                "only cross pairs (one O on each Al) and their oxygens"
+                if self.cross_only() else
+                "every first-shell O of every Al, every pair within the span")))
         for i, site in enumerate(self.mono_sites):
-            print("site %02d: %-7s O%-4d %s"
-                  % (i, site["site"], site["indices"][0],
-                     np.round(site["position"], 3)))
-        for k, pair in enumerate(self.pair_records()):
-            print("pair %02d: %-7s %-7s %.2f A"
-                  % (k, pair["names"][0], pair["names"][1], pair["span"]))
-    # -- disk -----------------------------------------------------------------
+            lines.append("site %02d: %-7s O%-4d %s"
+                         % (i, site["site"], site["indices"][0],
+                            np.round(site["position"], 3)))
+        for k, (site_a, site_b) in enumerate(self.bi_sites):
+            bridge = self.bridging_si(site_a, site_b, nl)
+            lines.append("pair %02d: %-7s %-7s %.2f A%s"
+                         % (k, site_a["site"], site_b["site"], self.span(site_a, site_b),
+                            "  via " + ", ".join("%s(%d)" % (self.label_of(t), t)
+                                                 for t in bridge) if bridge else ""))
+        return "\n".join(lines)
 
-    def save(self, run_dir):
-        """Write ``bare.xyz`` and ``framework.json`` into ``run_dir``."""
-        os.makedirs(run_dir, exist_ok=True)
-        write(os.path.join(run_dir, config.BARE_XYZ), self.atoms)
-        record = {"code": self.code,
-                  "t_labels": self.t_labels,
-                  "al_indices": self.al_indices,
-                  "repeats": [int(r) for r in self.repeats],
-                  "max_span": float(self.max_span),
-                  "t_sites": self.t_sites,
-                  "o_sites": self.o_sites,
-                  "mono_sites": [_site_to_json(site) for site in self.mono_sites],
-                  "bi_sites": self.pair_records()}
-        with open(os.path.join(run_dir, config.FRAMEWORK_JSON), "w") as handle:
-            json.dump(record, handle, indent=2)
+    # -- serialisation ------------------------------------------------------
+
+    def to_dict(self):
+        """Everything but the atoms, as plain json-able values. Store the
+        atoms separately (an xyz file) and give both to :meth:`from_dict`."""
+        return {"code": self.code,
+                "t_labels": self.t_labels,
+                "al_indices": self.al_indices,
+                "repeats": [int(r) for r in self.repeats],
+                "max_span": float(self.max_span),
+                "site_rule": self.site_rule,
+                "t_sites": self.t_sites,
+                "o_sites": self.o_sites,
+                "mono_sites": [_site_to_json(site) for site in self.mono_sites],
+                "bi_sites": self.pair_records()}
+
+    @classmethod
+    def from_dict(cls, record, atoms):
+        """Rebuild from :meth:`to_dict` output plus the atoms; sites are read
+        back, not recomputed, so indices stay comparable across runs."""
+        framework = cls(record["code"], atoms, record["t_labels"],
+                        record["al_indices"], record["repeats"],
+                        record["t_sites"], record["o_sites"],
+                        site_rule=record.get("site_rule", DEFAULT_SITE_RULE))
+        framework.max_span = record["max_span"]
+        framework.mono_sites = [_site_from_json(site) for site in record["mono_sites"]]
+        framework.bi_sites = [(framework.mono_sites[i], framework.mono_sites[j])
+                              for i, j in (pair["sites"] for pair in record["bi_sites"])]
+        return framework
 
 
-def bare_supercell(code, min_length=config.SUPERCELL_MIN_LENGTH):
+def bare_supercell(code, min_length=SUPERCELL_MIN_LENGTH):
     """(supercell, repeats, t_sites, o_sites) for IZA ``code``: the pure
     silica framework repeated so every cell edge >= ``min_length``, with the
     maze site tables mapped onto supercell indices. Every framework of one
@@ -376,7 +478,7 @@ def bare_supercell(code, min_length=config.SUPERCELL_MIN_LENGTH):
     return supercell, repeats, t_sites, o_sites
 
 
-def unique_pairs(code, min_length=config.SUPERCELL_MIN_LENGTH):
+def unique_pairs(code, min_length=SUPERCELL_MIN_LENGTH):
     """{name: record} of every symmetry-distinct second-order T pair in
     ``code``, e.g. ``"T1-T4_5.14": {"t_labels": ["T1", "T4"],
     "indices": [first, second], "distance": 5.14, "repeats": [...]}``.
@@ -407,34 +509,17 @@ def unique_pairs(code, min_length=config.SUPERCELL_MIN_LENGTH):
     return pairs
 
 
-def load_framework(run_dir):
-    """The framework saved in ``run_dir``; sites are read back, not recomputed."""
-    atoms = read(os.path.join(run_dir, config.BARE_XYZ))
-    with open(os.path.join(run_dir, config.FRAMEWORK_JSON)) as handle:
-        record = json.load(handle)
-    framework = ZeoliteFramework(record["code"], atoms, record["t_labels"],
-                                 record["al_indices"], record["repeats"],
-                                 record["t_sites"], record["o_sites"])
-    framework.max_span = record["max_span"]
-    framework.mono_sites = [_site_from_json(site) for site in record["mono_sites"]]
-    framework.bi_sites = [(framework.mono_sites[i], framework.mono_sites[j])
-                          for i, j in (pair["sites"] for pair in record["bi_sites"])]
-    return framework
-
-
-def build_framework(code, t_labels, indices=None,
-                    min_length=config.SUPERCELL_MIN_LENGTH):
+def build_framework(code, t_labels, indices=None, min_length=SUPERCELL_MIN_LENGTH,
+                    max_span=SITE_PAIR_MAX_SPAN, site_rule=DEFAULT_SITE_RULE):
     """Bare zeolite ``code`` with the T-sites in ``t_labels`` replaced by
-    Al, their midpoint centred, sites found.
+    Al, their midpoint centred, sites found (pairs up to ``max_span``, by
+    ``site_rule`` -- "all" or "cross", see the module docstring).
 
     ``t_labels`` is a tuple like ("T4",) or ("T4", "T1"); a bare string is
     taken as one label. The first Al is the first copy of its label; each
     later Al is the nearest second-order T neighbour of the first Al with
     the requested label. ``indices`` (supercell atom indices, same length
     as ``t_labels``) overrides that choice.
-
-    maze reads ``./data/<code>.cif`` if it exists and downloads it from the
-    IZA database otherwise, so keep ``data/`` next to where you run.
     """
     if isinstance(t_labels, str):
         t_labels = (t_labels,)
@@ -453,7 +538,7 @@ def build_framework(code, t_labels, indices=None,
             raise ValueError("indices and t_labels differ in length")
         substitute_al_and_center(supercell, al_indices)
         return ZeoliteFramework(code, supercell, t_labels, al_indices, repeats,
-                                t_sites, o_sites).find_sites()
+                                t_sites, o_sites).find_sites(max_span, site_rule)
 
     first = t_sites[t_labels[0]][0]
     substitute_al_and_center(supercell, [first])
@@ -471,4 +556,4 @@ def build_framework(code, t_labels, indices=None,
         framework.t_labels.append(label)
 
     substitute_al_and_center(framework.atoms, framework.al_indices)
-    return framework.find_sites()
+    return framework.find_sites(max_span, site_rule)

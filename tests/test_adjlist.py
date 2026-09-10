@@ -1,6 +1,6 @@
 """Tests for pyntaz.adjlist: parser, rings, placement, torsions, X sites.
 
-Run:  python3 test_adjlist.py
+Run:  python3 tests/test_adjlist.py   (from the repo root)
 Every check prints PASS/FAIL; exits nonzero on any failure. Also writes
 xyz files of every built structure into ./structures for visual inspection.
 """
@@ -11,13 +11,9 @@ import numpy as np
 from ase.io import write as ase_write
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# works both from the repo root (pyntaz/ next to this file) and from
-# scripts/ (pyntaz/ one level up), like _common.py does
-for candidate in (HERE, os.path.dirname(HERE)):
-    if os.path.isdir(os.path.join(candidate, "pyntaz")):
-        if candidate not in sys.path:
-            sys.path.insert(0, candidate)
-        break
+REPO = os.path.dirname(HERE)          # tests/ sits directly under the repo
+if REPO not in sys.path:
+    sys.path.insert(0, REPO)
 
 from pyntaz.adjlist import AdjacencyStructure, AdjacencyListError
 

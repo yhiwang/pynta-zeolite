@@ -1,100 +1,48 @@
-"""Step 2 of the workflow: relax one initial guess with MACE, framework
-frozen, and the SLURM job that runs it.
+"""Step 2 of the workflow: relax one structure with MACE, framework frozen.
 
-Only ASE, MACE and :mod:`pyntaz.geometry` are needed here so the worker can
-run on a compute node without maze or RMG.
+Only ASE, MACE and :mod:`pyntaz.geometry` are needed here so it can run on
+a compute node without maze or RMG. Reading the input and writing the
+result are the caller's job; the optimizer's own log and trajectory are
+written wherever the caller points them.
 """
 
-import os
-
-from ase.io import read, write
 from ase.optimize import BFGS
 from ase.constraints import FixAtoms
-from ase.calculators.singlepoint import SinglePointCalculator
 
-from . import config
 from .geometry import framework_indices
 
-RELAX_WORKER = "relax_one.py"     # scripts/relax_one.py, copied into every job dir
+RELAX_FMAX = 0.05           # eV/A
+RELAX_MAX_STEPS = 100
 
 
-def relax_structure(xyz_path, model_path=config.MACE_MODEL,
-                    fmax=config.RELAX_FMAX, max_steps=config.RELAX_MAX_STEPS,
-                    device="cpu"):
-    """Relax ``xyz_path`` with MACE, freezing the framework.
+def relax(atoms, model_path, frozen=None, fmax=RELAX_FMAX,
+          max_steps=RELAX_MAX_STEPS, device="cpu", logfile=None,
+          trajectory=None):
+    """Relax ``atoms`` in place with MACE and BFGS.
 
-    The framework is the largest connected cluster of Si/O/Al, found by
-    connectivity rather than atom index, so an adsorbate containing O forms
-    its own cluster and stays free.
+    ``frozen`` lists the atoms held fixed; by default the framework, found
+    by connectivity (the largest connected cluster of Si/O/Al) rather than by
+    index, so an adsorbate containing O forms its own cluster and stays
+    free. ``logfile`` / ``trajectory`` are passed straight to the optimizer.
 
-    Writes ``relax.xyz`` (with energy and forces), ``relax.traj`` and
-    ``relax.log`` next to the input. Returns (atoms, energy, converged).
+    ``model_path`` must be a file: a bare model name would make MACE try to
+    download it, which fails on a compute node without internet.
+
+    Returns (energy, forces, converged, n_steps). ``atoms`` keeps the MACE
+    calculator, whose results are dropped when it is replaced, so cache
+    what you need before writing.
     """
     from mace.calculators import mace_mp   # heavy import, only when relaxing
 
-    if not os.path.isfile(model_path):
-        raise FileNotFoundError("MACE model file not found: " + model_path)
-
-    atoms = read(xyz_path)
     atoms.pbc = True
-
-    frozen = framework_indices(atoms)
-    free = [i for i in range(len(atoms)) if i not in set(frozen)]
-    print("frozen  %d atoms  %s"
-          % (len(frozen), sorted(set(atoms[i].symbol for i in frozen))))
-    print("free    %d atoms  %s" % (len(free), [atoms[i].symbol for i in free]))
+    if frozen is None:
+        frozen = framework_indices(atoms)
     if frozen:
-        atoms.set_constraint(FixAtoms(indices=frozen))
+        atoms.set_constraint(FixAtoms(indices=list(frozen)))
 
     atoms.calc = mace_mp(model=model_path, default_dtype="float64", device=device)
-
-    out_dir = os.path.dirname(os.path.abspath(xyz_path))
-    optimizer = BFGS(atoms,
-                     logfile=os.path.join(out_dir, config.RELAX_LOG),
-                     trajectory=os.path.join(out_dir, config.RELAX_TRAJECTORY))
+    optimizer = BFGS(atoms, logfile=logfile, trajectory=trajectory)
     converged = bool(optimizer.run(fmax=fmax, steps=max_steps))
 
-    energy = atoms.get_potential_energy()
-    forces = atoms.get_forces()
-    print("energy    %.3f eV" % energy)
-    print("steps     %d" % optimizer.get_number_of_steps())
-    print("converged %s" % converged)
-
-    # MACE's results are dropped with the calculator; cache them so extxyz
-    # writes energy and forces into the file
-    atoms.calc = SinglePointCalculator(atoms, energy=energy, forces=forces)
-    write(os.path.join(out_dir, config.RELAXED_STRUCTURE), atoms)
-    return atoms, energy, converged
-
-
-SLURM_TEMPLATE = """#!/bin/bash
-#SBATCH --account=%(account)s
-#SBATCH --partition=%(partition)s
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=%(cores)d
-#SBATCH --mem=%(memory)s
-#SBATCH --time=%(time)s
-#SBATCH --output=job.out
-#SBATCH --error=job.err
-
-export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
-export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
-export PYTHONPATH=%(repo)s:$PYTHONPATH
-
-# the env python directly -- conda.sh on HPC2 points at an old install path
-# and `conda activate` fails silently
-%(python)s %(worker)s %(xyz)s
-"""
-
-
-def slurm_job_script(xyz_name, worker=RELAX_WORKER,
-                     cores=config.SLURM_CORES, memory=config.SLURM_MEMORY,
-                     time=config.SLURM_TIME):
-    """Text of ``job.sh`` for one relaxation; ``xyz_name`` and ``worker``
-    are relative to the job directory."""
-    return SLURM_TEMPLATE % {"account": config.SLURM_ACCOUNT,
-                             "partition": config.SLURM_PARTITION,
-                             "cores": cores, "memory": memory, "time": time,
-                             "repo": config.REPO, "python": config.PYTHON,
-                             "worker": worker, "xyz": xyz_name}
+    return (atoms.get_potential_energy(), atoms.get_forces(), converged,
+            optimizer.get_number_of_steps())

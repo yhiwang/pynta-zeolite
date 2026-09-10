@@ -2,8 +2,10 @@
 """Step 2 -- mirror Adsorbates/ into Adsorbates_relax/ and submit one MACE
 relaxation job per config.
 
-SUBMIT = False writes job dirs + job.sh only (dry run); True runs sbatch.
-Configs that already have a relax.xyz are skipped.
+settings.SUBMIT = False writes job dirs + job.sh only (dry run); True runs
+sbatch. Configs that already have a relax.xyz are skipped. Each job runs
+scripts/relax_one.py from this checkout, so keep it where it is until the
+jobs have started.
 """
 
 import os
@@ -11,42 +13,79 @@ import shutil
 import subprocess
 import sys
 
-from _common import config
-from pyntaz import runtree
-from pyntaz.relax import slurm_job_script, RELAX_WORKER
+import _common  # noqa: F401
+import layout
+import settings
 
-RUN_DIR = os.path.join("runs", "MOR_T2-T4_5.65")
-SUBMIT = True
-SKIP = ()
+WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "relax_one.py")
+
+JOB_TEMPLATE = """#!/bin/bash
+#SBATCH --account=%(account)s
+#SBATCH --partition=%(partition)s
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=%(cores)d
+#SBATCH --mem=%(memory)s
+#SBATCH --time=%(time)s
+#SBATCH --output=job.out
+#SBATCH --error=job.err
+
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
+export PYTHONPATH=%(repo)s:$PYTHONPATH
+
+# the env python directly: `conda activate` fails silently in batch jobs
+%(python)s %(worker)s %(xyz)s
+"""
 
 
-layout = config.RunLayout(RUN_DIR)
+def job_script(xyz_name):
+    """Text of job.sh for one relaxation; ``xyz_name`` is relative to the
+    job directory."""
+    return JOB_TEMPLATE % {"account": settings.SLURM_ACCOUNT,
+                           "partition": settings.SLURM_PARTITION,
+                           "cores": settings.SLURM_CORES,
+                           "memory": settings.SLURM_MEMORY,
+                           "time": settings.SLURM_TIME,
+                           "repo": _common.REPO, "python": settings.PYTHON,
+                           "worker": WORKER, "xyz": xyz_name}
 
-if not config.check_machine_paths():
-    sys.exit("fix pyntaz/config.py or set the PYNTAZ_* environment variables")
-if not os.path.isdir(layout.adsorbates):
-    sys.exit("%s not found -- run step 1 first" % layout.adsorbates)
 
-worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), RELAX_WORKER)
+def missing_machine_paths():
+    """[(name, path)] of the settings paths that do not exist."""
+    return [(name, path) for name, path in
+            (("PYTHON", settings.PYTHON), ("MACE_MODEL", settings.MACE_MODEL),
+             ("WORKER", WORKER))
+            if not os.path.exists(path)]
+
+
+run = layout.RunLayout(settings.RUN_DIR)
+
+for name, path in missing_machine_paths():
+    print("%s does not exist: %s" % (name, path))
+if missing_machine_paths():
+    sys.exit("fix scripts/settings.py or set the PYNTAZ_* environment variables")
+if not os.path.isdir(run.adsorbates):
+    sys.exit("%s not found -- run step 1 first" % run.adsorbates)
+
 n_jobs = 0
-for relative, xyz in runtree.initial_guess_files(layout.adsorbates):
-    if relative.split(os.sep)[0] in SKIP:
+for relative, xyz in layout.initial_guess_files(run.adsorbates):
+    if relative.split(os.sep)[0] in settings.SKIP:
         continue
 
-    job_dir = os.path.join(layout.relaxed, relative)
+    job_dir = os.path.join(run.relaxed, relative)
     os.makedirs(job_dir, exist_ok=True)
     shutil.copy2(xyz, os.path.join(job_dir, os.path.basename(xyz)))
-    shutil.copy2(worker, os.path.join(job_dir, RELAX_WORKER))
 
-    if os.path.exists(os.path.join(job_dir, config.RELAXED_STRUCTURE)):
+    if os.path.exists(os.path.join(job_dir, layout.RELAXED_STRUCTURE)):
         print("already done  ", relative)
         continue
 
-    with open(os.path.join(job_dir, "job.sh"), "w") as handle:
-        handle.write(slurm_job_script(os.path.basename(xyz)))
+    with open(os.path.join(job_dir, layout.JOB_SCRIPT), "w") as handle:
+        handle.write(job_script(os.path.basename(xyz)))
 
-    if SUBMIT:
-        result = subprocess.run(["sbatch", "--chdir=" + job_dir, "job.sh"],
+    if settings.SUBMIT:
+        result = subprocess.run(["sbatch", "--chdir=" + job_dir, layout.JOB_SCRIPT],
                                 capture_output=True, text=True)
         print(relative, "->", result.stdout.strip() or result.stderr.strip())
         if result.returncode != 0:
@@ -55,4 +94,4 @@ for relative, xyz in runtree.initial_guess_files(layout.adsorbates):
         print("would submit  ", relative)
     n_jobs += 1
 
-print("\n%d configs %s" % (n_jobs, "submitted" if SUBMIT else "would be submitted"))
+print("\n%d configs %s" % (n_jobs, "submitted" if settings.SUBMIT else "would be submitted"))

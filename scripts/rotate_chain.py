@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-"""Rotate one chain of an adsorbate and save the frames as a .traj.
+"""Rotate one chain of an adsorbate and save the frames as a .traj -- a
+quick look at what AdjacencyStructure does with a torsion.
 
     python scripts/rotate_chain.py
 
@@ -7,8 +8,7 @@ Edit ADJLIST, BOND and ANGLES below. ``mol.report()`` prints every bond you
 are allowed to put in BOND.
 """
 
-import _common                      # noqa: F401   puts the repo on sys.path
-
+import _common  # noqa: F401
 from ase.io import Trajectory
 from pyntaz.adjlist import AdjacencyStructure
 

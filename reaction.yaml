@@ -1,12 +1,3 @@
-# Minimal C2/C4 reaction set for a Bronsted acid zeolite
-# Three elementary steps, all primary alkoxides, framework-agnostic
-# (X is just a framework site -- this file works for MFI, CHA, MOR, FER...)
-#
-# Format: RMG-style adjacency lists; X = framework site, [Pt] = surface placeholder
-# Two-site convention: Bronsted proton site and alkoxide site are separate X atoms
-#
-# NOTE: index 2 is the exact microscopic reverse of index 1. See reactions.txt.
-
 - index: 0
   reactant: |
     multiplicity 1
@@ -74,15 +65,15 @@
 - index: 2
   reactant: |
     multiplicity 1
-    1 *1 C u0 p0 c0 {2,S} {5,S} {6,S} {14,S}
-    2 *2 C u0 p0 c0 {1,S} {3,S} {7,S} {8,S}
-    3 *3 C u0 p0 c0 {2,S} {4,S} {9,S} {10,S}
-    4 C u0 p0 c0 {3,S} {11,S} {12,S} {13,S}
-    5 H u0 p0 c0 {1,S}
-    6 H u0 p0 c0 {1,S}
-    7 H u0 p0 c0 {2,S}
-    8 H u0 p0 c0 {2,S}
-    9 H u0 p0 c0 {3,S}
+    1  *1 C u0 p0 c0 {2,S} {5,S} {6,S} {14,S}
+    2  *2 C u0 p0 c0 {1,S} {3,S} {7,S} {8,S}
+    3  C u0 p0 c0 {2,S} {4,S} {9,S} {10,S}
+    4  C u0 p0 c0 {3,S} {11,S} {12,S} {13,S}
+    5  H u0 p0 c0 {1,S}
+    6  H u0 p0 c0 {1,S}
+    7  *3 H u0 p0 c0 {2,S}
+    8  H u0 p0 c0 {2,S}
+    9  H u0 p0 c0 {3,S}
     10 H u0 p0 c0 {3,S}
     11 H u0 p0 c0 {4,S}
     12 H u0 p0 c0 {4,S}
@@ -91,20 +82,174 @@
     15 *5 X u0 p0 c0
   product: |
     multiplicity 1
-    1 *1 C u0 p0 c0 {2,D} {5,S} {6,S}
-    2 *2 C u0 p0 c0 {1,D} {7,S} {8,S}
-    3 *3 C u0 p0 c0 {4,S} {9,S} {10,S} {15,S}
-    4 C u0 p0 c0 {3,S} {11,S} {12,S} {13,S}
-    5 H u0 p0 c0 {1,S}
-    6 H u0 p0 c0 {1,S}
-    7 H u0 p0 c0 {2,S}
-    8 H u0 p0 c0 {2,S}
-    9 H u0 p0 c0 {3,S}
+    1  *1 C u0 p0 c0 {2,D} {5,S} {6,S}
+    2  *2 C u0 p0 c0 {1,D} {3,S} {8,S}
+    3  C u0 p0 c0 {2,S} {4,S} {9,S} {10,S}
+    4  C u0 p0 c0 {3,S} {11,S} {12,S} {13,S}
+    5  H u0 p0 c0 {1,S}
+    6  H u0 p0 c0 {1,S}
+    7  *3 H u0 p0 c0 {15,S}
+    8  H u0 p0 c0 {2,S}
+    9  H u0 p0 c0 {3,S}
+    10 H u0 p0 c0 {3,S}
+    11 H u0 p0 c0 {4,S}
+    12 H u0 p0 c0 {4,S}
+    13 H u0 p0 c0 {4,S}
+    14 *4 X u0 p0 c0
+    15 *5 X u0 p0 c0 {7,S}
+  reaction: CCCC[Pt] + [Pt] <=> CCC=C + [H][Pt] + [Pt]
+  reaction_family: Surface_Beta_H_Elimination
+
+- index: 3
+  reactant: |
+    multiplicity 1
+    1  *1 C u0 p0 c0 {2,D} {5,S} {6,S}
+    2  *2 C u0 p0 c0 {1,D} {3,S} {7,S}
+    3  C u0 p0 c0 {2,S} {4,S} {8,S} {9,S}
+    4  C u0 p0 c0 {3,S} {10,S} {11,S} {12,S}
+    5  H u0 p0 c0 {1,S}
+    6  H u0 p0 c0 {1,S}
+    7  H u0 p0 c0 {2,S}
+    8  H u0 p0 c0 {3,S}
+    9  H u0 p0 c0 {3,S}
+    10 H u0 p0 c0 {4,S}
+    11 H u0 p0 c0 {4,S}
+    12 H u0 p0 c0 {4,S}
+    13 *3 H u0 p0 c0 {14,S}
+    14 *4 X u0 p0 c0 {13,S}
+    15 *5 X u0 p0 c0
+  product: |
+    multiplicity 1
+    1  *1 C u0 p0 c0 {2,S} {5,S} {6,S} {13,S}
+    2  *2 C u0 p0 c0 {1,S} {3,S} {7,S} {15,S}
+    3  C u0 p0 c0 {2,S} {4,S} {8,S} {9,S}
+    4  C u0 p0 c0 {3,S} {10,S} {11,S} {12,S}
+    5  H u0 p0 c0 {1,S}
+    6  H u0 p0 c0 {1,S}
+    7  H u0 p0 c0 {2,S}
+    8  H u0 p0 c0 {3,S}
+    9  H u0 p0 c0 {3,S}
+    10 H u0 p0 c0 {4,S}
+    11 H u0 p0 c0 {4,S}
+    12 H u0 p0 c0 {4,S}
+    13 *3 H u0 p0 c0 {1,S}
+    14 *4 X u0 p0 c0
+    15 *5 X u0 p0 c0 {2,S}
+  reaction: CCC=C + [H][Pt] + [Pt] <=> CCC(C)[Pt] + [Pt]
+  reaction_family: Surface_Protonation
+
+- index: 4
+  reactant: |
+    multiplicity 1
+    1  C u0 p0 c0 {2,S} {5,S} {6,S} {7,S}
+    2  *1 C u0 p0 c0 {1,S} {3,S} {8,S} {14,S}
+    3  *2 C u0 p0 c0 {2,S} {4,S} {9,S} {10,S}
+    4  C u0 p0 c0 {3,S} {11,S} {12,S} {13,S}
+    5  H u0 p0 c0 {1,S}
+    6  H u0 p0 c0 {1,S}
+    7  H u0 p0 c0 {1,S}
+    8  H u0 p0 c0 {2,S}
+    9  *3 H u0 p0 c0 {3,S}
+    10 H u0 p0 c0 {3,S}
+    11 H u0 p0 c0 {4,S}
+    12 H u0 p0 c0 {4,S}
+    13 H u0 p0 c0 {4,S}
+    14 *4 X u0 p0 c0 {2,S}
+    15 *5 X u0 p0 c0
+  product: |
+    multiplicity 1
+    1  C u0 p0 c0 {2,S} {5,S} {6,S} {7,S}
+    2  *1 C u0 p0 c0 {1,S} {3,D} {8,S}
+    3  *2 C u0 p0 c0 {2,D} {4,S} {10,S}
+    4  C u0 p0 c0 {3,S} {11,S} {12,S} {13,S}
+    5  H u0 p0 c0 {1,S}
+    6  H u0 p0 c0 {1,S}
+    7  H u0 p0 c0 {1,S}
+    8  H u0 p0 c0 {2,S}
+    9  *3 H u0 p0 c0 {15,S}
+    10 H u0 p0 c0 {3,S}
+    11 H u0 p0 c0 {4,S}
+    12 H u0 p0 c0 {4,S}
+    13 H u0 p0 c0 {4,S}
+    14 *4 X u0 p0 c0
+    15 *5 X u0 p0 c0 {9,S}
+  reaction: CCC(C)[Pt] + [Pt] <=> CC=CC + [H][Pt] + [Pt]
+  reaction_family: Surface_Beta_H_Elimination
+
+# I5: 2-butoxide -> isobutoxide (skeletal, methyl C4 shifts C3 -> C2, O moves C2 -> C3)
+- index: 5
+  reactant: |
+    multiplicity 1
+    1  C u0 p0 c0 {2,S} {5,S} {6,S} {7,S}
+    2  *1 C u0 p0 c0 {1,S} {3,S} {8,S} {14,S}
+    3  *2 C u0 p0 c0 {2,S} {4,S} {9,S} {10,S}
+    4  *3 C u0 p0 c0 {3,S} {11,S} {12,S} {13,S}
+    5  H u0 p0 c0 {1,S}
+    6  H u0 p0 c0 {1,S}
+    7  H u0 p0 c0 {1,S}
+    8  H u0 p0 c0 {2,S}
+    9  H u0 p0 c0 {3,S}
+    10 H u0 p0 c0 {3,S}
+    11 H u0 p0 c0 {4,S}
+    12 H u0 p0 c0 {4,S}
+    13 H u0 p0 c0 {4,S}
+    14 *4 X u0 p0 c0 {2,S}
+    15 *5 X u0 p0 c0
+  product: |
+    multiplicity 1
+    1  C u0 p0 c0 {2,S} {5,S} {6,S} {7,S}
+    2  *1 C u0 p0 c0 {1,S} {3,S} {4,S} {8,S}
+    3  *2 C u0 p0 c0 {2,S} {9,S} {10,S} {15,S}
+    4  *3 C u0 p0 c0 {2,S} {11,S} {12,S} {13,S}
+    5  H u0 p0 c0 {1,S}
+    6  H u0 p0 c0 {1,S}
+    7  H u0 p0 c0 {1,S}
+    8  H u0 p0 c0 {2,S}
+    9  H u0 p0 c0 {3,S}
     10 H u0 p0 c0 {3,S}
     11 H u0 p0 c0 {4,S}
     12 H u0 p0 c0 {4,S}
     13 H u0 p0 c0 {4,S}
     14 *4 X u0 p0 c0
     15 *5 X u0 p0 c0 {3,S}
-  reaction: CCCC[Pt] <=> C=C + CC[Pt]
-  reaction_family: Surface_Beta_Scission
+  reaction: CCC(C)[Pt] + [Pt] <=> CC(C)C[Pt] + [Pt]
+  reaction_family: Surface_Methyl_Shift
+
+# I6: isobutoxide -> isobutene + H-Z (beta-H from the tertiary C2 to a neighboring O)
+- index: 6
+  reactant: |
+    multiplicity 1
+    1  C u0 p0 c0 {2,S} {5,S} {6,S} {7,S}
+    2  *1 C u0 p0 c0 {1,S} {3,S} {4,S} {8,S}
+    3  *2 C u0 p0 c0 {2,S} {9,S} {10,S} {14,S}
+    4  C u0 p0 c0 {2,S} {11,S} {12,S} {13,S}
+    5  H u0 p0 c0 {1,S}
+    6  H u0 p0 c0 {1,S}
+    7  H u0 p0 c0 {1,S}
+    8  *3 H u0 p0 c0 {2,S}
+    9  H u0 p0 c0 {3,S}
+    10 H u0 p0 c0 {3,S}
+    11 H u0 p0 c0 {4,S}
+    12 H u0 p0 c0 {4,S}
+    13 H u0 p0 c0 {4,S}
+    14 *4 X u0 p0 c0 {3,S}
+    15 *5 X u0 p0 c0
+  product: |
+    multiplicity 1
+    1  C u0 p0 c0 {2,S} {5,S} {6,S} {7,S}
+    2  *1 C u0 p0 c0 {1,S} {3,D} {4,S}
+    3  *2 C u0 p0 c0 {2,D} {9,S} {10,S}
+    4  C u0 p0 c0 {2,S} {11,S} {12,S} {13,S}
+    5  H u0 p0 c0 {1,S}
+    6  H u0 p0 c0 {1,S}
+    7  H u0 p0 c0 {1,S}
+    8  *3 H u0 p0 c0 {15,S}
+    9  H u0 p0 c0 {3,S}
+    10 H u0 p0 c0 {3,S}
+    11 H u0 p0 c0 {4,S}
+    12 H u0 p0 c0 {4,S}
+    13 H u0 p0 c0 {4,S}
+    14 *4 X u0 p0 c0
+    15 *5 X u0 p0 c0 {8,S}
+  reaction: CC(C)C[Pt] + [Pt] <=> CC(C)=C + [H][Pt] + [Pt]
+  reaction_family: Surface_Beta_H_Elimination
