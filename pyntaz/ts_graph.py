@@ -12,7 +12,10 @@ breaking bonds can be lengthened through ``bond_scales``.
 
 The graph's ``X`` sites are seated on real framework oxygens by
 :class:`PairSweep`. In stage one every torsion x axial combination is built
-at a series of site-bond scales and the scale whose X-X span best matches
+(a bond whose order changes is not locked like a double bond but stepped
+through the positions that swap which substituent is syn -- 120 deg apart
+on a tetrahedral end -- since which H sits next to the site matters) at a
+series of site-bond scales and the scale whose X-X span best matches
 the O-O distance is kept, provided it lands within a tolerance. In stage
 two each survivor is placed with its X atoms on the two oxygens and rolled
 about the O-O axis; every roll is scored by the clearance of its tail from
@@ -28,12 +31,12 @@ from itertools import combinations, product
 import numpy as np
 from ase import Atoms
 
-from .adjlist import AdjacencyStructure
+from .adjlist import AdjacencyStructure, find_rings
 from .geometry import min_clearance, rotate_vector, unit
 
 ORDER_STR = {1.0: "S", 1.5: "B", 2.0: "D", 3.0: "T"}
 
-DEFAULT_STRETCH = {"form": 1.0, "break": 1.0}   # bond length factors by change
+DEFAULT_STRETCH = {"form": 1.2, "break": 1.2}   # bond length factors by change
 TORSION_STEPS = 24          # steps over 360 deg for every free torsion (15 deg)
 ROLL_STEPS = 24             # steps over 360 deg about the O-O axis (15 deg)
 SPAN_TOLERANCE = 0.2        # A, |fitted X-X span - O-O distance| allowed
@@ -75,6 +78,8 @@ class TSGraph:
         self.adj = {i: {} for i in range(len(self.elements))}
         self.bonds = {}
         before_map, after_map = bond_map(reactant), bond_map(product)
+        self.reactant_bonds = set(before_map)
+        self.product_bonds = set(after_map)
         for i, j in sorted(set(before_map) | set(after_map)):
             before, after = before_map.get((i, j)), after_map.get((i, j))
             change = ("form" if before is None else
@@ -102,12 +107,47 @@ class TSGraph:
                 for (i, j), info in sorted(self.bonds.items())
                 if info["change"] != "none"]
 
+    def rings(self):
+        """[(atoms, where)] for every ring of the merged graph. ``where`` is
+        "both", "reactant" or "product" when the ring is a real cycle on
+        that side, or "ts" when it is closed only by the changing bonds
+        (a 1,2-shift signature: not a ring on either side)."""
+        neighbors = {i: sorted(self.adj[i]) for i in self.adj}
+        out = []
+        for ring in find_rings(neighbors):
+            edges = {tuple(sorted((ring[k], ring[(k + 1) % len(ring)])))
+                     for k in range(len(ring))}
+            before = edges <= self.reactant_bonds
+            after = edges <= self.product_bonds
+            where = ("both" if before and after else
+                     "reactant" if before else
+                     "product" if after else "ts")
+            out.append((ring, where))
+        return out
+
+    def ts_rings(self):
+        """Atom lists of the rings that exist only in the merged graph."""
+        return [ring for ring, where in self.rings() if where == "ts"]
+
     def bond_scales(self):
         """{(label, label): factor} in adjacency-list (1-based) labels for
         every bond whose stretch is not 1, ready for AdjacencyStructure."""
         return {(i + 1, j + 1): info["stretch"]
                 for (i, j), info in self.bonds.items()
                 if info["stretch"] != 1.0}
+
+    def changing_bonds(self):
+        """{(label, label)} in adjacency-list (1-based) labels of every bond
+        that forms or breaks, ready for AdjacencyStructure(changing=...)."""
+        return {(i + 1, j + 1) for (i, j), info in self.bonds.items()
+                if info["change"] in ("form", "break")}
+
+    def order_changing_bonds(self):
+        """{(label, label)} of every bond whose order changes (S <-> D ...),
+        ready for AdjacencyStructure(unlocked=...): built at the higher
+        order's length but not locked planar."""
+        return {(i + 1, j + 1) for (i, j), info in self.bonds.items()
+                if info["change"] == "order"}
 
     def adjlist(self):
         """The merged graph as an RMG adjacency list."""
@@ -129,6 +169,9 @@ class TSGraph:
                          % (change, "%s-%s" % (self.tag(i), self.tag(j)),
                             ORDER_STR.get(before, "-"), ORDER_STR.get(after, "-"),
                             stretch))
+        for ring, where in self.rings():
+            lines.append("  ring   %-14s %s"
+                         % ("-".join(self.tag(i) for i in ring), where))
         return "\n".join(lines)
 
 
@@ -138,9 +181,19 @@ class TSGraph:
 
 def axial_options(struct):
     """{label: [(a, b), ...]} -- every 2-combination of a five-coordinate
-    atom's neighbours, i.e. every candidate axial pair."""
-    return {label: list(combinations(neighbors, 2))
-            for label, neighbors in struct.hypervalent_atoms().items()}
+    atom's neighbours, i.e. every candidate axial pair of its bipyramid.
+
+    Atoms held by two or more ring bonds are left out: the builder does not
+    make a bipyramid there (see ``_bridge_directions``) and ignores ``axial``.
+    """
+    out = {}
+    for label, neighbors in struct.hypervalent_atoms().items():
+        ring_anchors = sum(1 for n in neighbors
+                           if (min(label, n), max(label, n)) in struct.ring_bonds)
+        if ring_anchors >= 2:
+            continue
+        out[label] = list(combinations(neighbors, 2))
+    return out
 
 
 def effective_torsions(struct):
@@ -173,6 +226,15 @@ def effective_torsions(struct):
     return keep
 
 
+def swap_steps(struct, key):
+    """How many torsion steps an unlocked (order-changing) bond needs:
+    one per substituent on the moving end, so the sweep visits exactly the
+    arrangements that swap which substituent is syn -- 3 steps of 120 deg
+    for a tetrahedral end, 2 of 180 for a trigonal one."""
+    i, j = key
+    return max(len(struct.neighbors[j]) - 1, 1)
+
+
 # --------------------------------------------------------------------------
 # building and seating one geometry
 # --------------------------------------------------------------------------
@@ -191,11 +253,12 @@ def built_positions(struct, n_atoms):
 
 
 def build_at(adjlist, site_elements, scale, n_atoms, torsions=None, axial=None,
-             bond_scales=None):
+             bond_scales=None, changing=None, unlocked=None):
     """Positions of the graph built at one site-bond ``scale``."""
     struct = AdjacencyStructure.from_adjlist(adjlist, site_elements=site_elements,
                                              site_bond_scale=scale,
-                                             bond_scales=bond_scales)
+                                             bond_scales=bond_scales,
+                                             changing=changing, unlocked=unlocked)
     struct.build(torsions=torsions, axial=axial)
     return built_positions(struct, n_atoms)
 
@@ -209,7 +272,8 @@ def scale_values(scale_range=SITE_SCALE_RANGE):
 
 def fit_site_scale(adjlist, site_elements, n_atoms, index_a, index_b,
                    position_a, position_b, torsions=None, axial=None,
-                   bond_scales=None, scale_range=SITE_SCALE_RANGE):
+                   bond_scales=None, scale_range=SITE_SCALE_RANGE, changing=None,
+                   unlocked=None):
     """(scale, span, error): the site-bond scale at which the distance
     between graph atoms ``index_a`` and ``index_b`` comes closest to the
     distance between ``position_a`` and ``position_b``."""
@@ -217,7 +281,7 @@ def fit_site_scale(adjlist, site_elements, n_atoms, index_a, index_b,
     best = None
     for scale in scale_values(scale_range):
         positions = build_at(adjlist, site_elements, float(scale), n_atoms,
-                             torsions, axial, bond_scales)
+                             torsions, axial, bond_scales, changing, unlocked)
         span = float(np.linalg.norm(positions[index_a] - positions[index_b]))
         error = abs(span - target)
         if best is None or error < best[2]:
@@ -302,11 +366,21 @@ class PairSweep:
 
         self.adjlist = ts.adjlist()
         self.bond_scales = ts.bond_scales()
+        self.changing = ts.changing_bonds()
+        self.unlocked = ts.order_changing_bonds()
         self.n_atoms = len(ts.elements)
-        survey = AdjacencyStructure.from_adjlist(self.adjlist)
+        survey = AdjacencyStructure.from_adjlist(self.adjlist, changing=self.changing,
+                                                 unlocked=self.unlocked)
         self.rotatable = survey.rotatable_bonds()
         self.torsion_keys = sorted(effective_torsions(survey))
+        # steps per torsion key: the full grid for a single bond, only the
+        # substituent-swap positions for an order-changing (unlocked) bond
+        self.steps = {key: (swap_steps(survey, key)
+                            if survey.is_unlocked(*key) else torsion_steps)
+                      for key in self.torsion_keys}
+        self.survey = survey
         options = axial_options(survey)
+        self.axial_options = options
         self.axial_labels = sorted(options)
         self.axial_grid = list(product(*(options[label] for label in self.axial_labels)))
 
@@ -315,9 +389,54 @@ class PairSweep:
         binders = {b for x in sites for b in ts.adj[x]}
         self.tail = [i for i in self.keep if i not in binders]
 
+    def describe(self):
+        """Multi-line summary of what stage one enumerates and why: each
+        torsion with its step count, order-changing bonds swept as
+        substituent swaps, rotatable bonds left out, the axial grid per
+        five-coordinate atom, and ring-held atoms placed by the bridge rule."""
+        tag = lambda label: self.ts.tag(label - 1)
+        bond = lambda key: "%s-%s" % (tag(key[0]), tag(key[1]))
+        survey = self.survey
+        factors = [str(self.steps[key]) for key in self.torsion_keys]
+        factors += [str(len(survey_opts)) for survey_opts in self.axial_options.values()]
+        lines = ["  sweep: %s = %d builds per scale and pair"
+                 % (" x ".join(factors) if factors else "1", self.n_builds)]
+        for key in self.torsion_keys:
+            steps = self.steps[key]
+            if survey.is_unlocked(*key):
+                lines.append("    swap     %-16s order changes: %d positions (%.0f deg), "
+                             "which substituent is syn"
+                             % (bond(key), steps, 360.0 / steps))
+            else:
+                lines.append("    torsion  %-16s single bond: %d steps (%.0f deg)"
+                             % (bond(key), steps, 360.0 / steps))
+        for key in sorted(self.rotatable):
+            if key not in self.torsion_keys:
+                lines.append("    fixed    %-16s rotatable but nothing to sweep "
+                             "(symmetric top or no real substituent)" % bond(key))
+        for label, pairs in self.axial_options.items():
+            lines.append("    axial    %-16s five-coordinate: %d axial pairs"
+                         % (tag(label), len(pairs)))
+        ring_held = [label for label in survey.hypervalent_atoms()
+                     if label not in self.axial_options]
+        if ring_held:
+            lines.append("    bridge   %-16s five-coordinate ring atoms: placed by the "
+                         "anti rule, nothing to enumerate"
+                         % " ".join(tag(label) for label in ring_held))
+        return "\n".join(lines)
+
     @property
     def n_builds(self):
-        return self.torsion_steps ** len(self.torsion_keys) * len(self.axial_grid)
+        count = len(self.axial_grid)
+        for key in self.torsion_keys:
+            count *= self.steps[key]
+        return count
+
+    def torsion_grid(self):
+        """Every {key: angle} combination of the sweep, in order."""
+        ranges = [[k * (360.0 / self.steps[key]) for k in range(self.steps[key])]
+                  for key in self.torsion_keys]
+        return [dict(zip(self.torsion_keys, angles)) for angles in product(*ranges)]
 
     def axial_index(self, axial):
         """Position of an axial choice in ``axial_grid``."""
@@ -326,23 +445,23 @@ class PairSweep:
     def _positions(self, angles, axial, scale):
         torsions = {key: angle for key, angle in zip(self.torsion_keys, angles)}
         return build_at(self.adjlist, self.site_elements, scale, self.n_atoms,
-                        torsions, axial, self.bond_scales)
+                        torsions, axial, self.bond_scales, self.changing,
+                        self.unlocked)
 
     def survivors(self):
         """Stage one: every torsion x axial combination whose fitted X-X
         span lands within ``span_tolerance`` of the O-O distance, as
         :class:`Survivor` records sorted best fit first."""
-        step = 360.0 / self.torsion_steps
         survivors = []
-        for combo in product(range(self.torsion_steps), repeat=len(self.torsion_keys)):
-            torsions = {key: k * step for key, k in zip(self.torsion_keys, combo)}
-            angles = tuple(round(angle) for angle in torsions.values())
+        for torsions in self.torsion_grid():
+            angles = tuple(round(torsions[key]) for key in self.torsion_keys)
             for axial_combo in self.axial_grid:
                 axial = {label: pair for label, pair in zip(self.axial_labels, axial_combo)}
                 scale, span, error = fit_site_scale(
                     self.adjlist, self.site_elements, self.n_atoms,
                     self.site_a, self.site_b, self.target_a, self.target_b,
-                    torsions, axial, self.bond_scales, self.scale_range)
+                    torsions, axial, self.bond_scales, self.scale_range,
+                    self.changing, self.unlocked)
                 if error <= self.span_tolerance:
                     survivors.append(Survivor(angles, axial, scale, span, error))
         survivors.sort(key=lambda s: s.error)

@@ -79,9 +79,9 @@ RMSD_THRESHOLD = 2.0            # A, below this two relaxed configs are the same
 
 TS_MAX_SPAN = 3.5               # A, O-O pairs further apart than this are not tried
                                 # (which pairs: the SITE_RULE saved with the framework)
-TS_TORSION_STEPS = 24           # steps over 360 deg for every free torsion
+TS_TORSION_STEPS = 6           # steps over 360 deg for every free torsion
 TS_ROLL_STEPS = 24              # steps over 360 deg about the O-O axis
-TS_SPAN_TOLERANCE = 0.2         # A, |fitted X-X span - d(O-O)| allowed
-TS_SITE_SCALE_RANGE = (1.0, 2.0, 0.05)   # X-atom bond scale tried: start, stop, step
+TS_SPAN_TOLERANCE = 0.4         # A, |fitted X-X span - d(O-O)| allowed
+TS_SITE_SCALE_RANGE = (1.0, 2.0, 0.1)   # X-atom bond scale tried: start, stop, step
 TS_BOND_STRETCH = {"form": 1.0, "break": 1.0}   # length factors for changing bonds
 TS_CLEARANCE_MIN = 1.5          # A, a guess whose best roll clears less is not written

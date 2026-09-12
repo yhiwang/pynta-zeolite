@@ -20,7 +20,11 @@ relaxation rather than used as a final geometry:
 * chains grow outward by BFS; each atom's neighbor directions come from its
   steric number (bonded neighbors + lone pairs -- plain VSEPR), distances
   from summed covalent radii scaled by bond order;
-* a double bond locks the dihedral across it (ethylene comes out planar);
+* a double bond locks the dihedral across it (ethylene comes out planar),
+  unless the bond is listed in ``unlocked={(a, b), ...}`` -- a bond whose
+  order changes in a transition state is neither single nor double, so it
+  is built at the higher order's length but rotates like a single bond
+  (default dihedral 0, i.e. the locked geometry, when no angle is given);
   a single bond leaves a free torsion that is NOT optimized here --
   ``rotatable_bonds()`` reports every free torsion and ``build(torsions=...)``
   takes the angles you choose, defaulting to anti (180 degrees);
@@ -28,6 +32,14 @@ relaxation rather than used as a final geometry:
   the axial slots is not decided here -- ``hypervalent_atoms()`` reports
   them and ``build(axial={label: (a, b)})`` takes the pair, defaulting to
   the anchor plus the lowest-labeled unplaced neighbor;
+* a five-coordinate atom reached through two ring bonds (a bridged
+  transition-state ring, e.g. the C-C-C triangle of a 1,2-methyl shift) is
+  not a bipyramid. With ``changing={(a, b), ...}`` (the bonds that form or
+  break) and exactly one of its ring bonds changing, the neighbor in a
+  changing bond goes exactly anti to that ring bond and the other two fill
+  the remaining space, so at every atom the forming and the breaking bond
+  point as far apart as possible; otherwise the three sit in a methyl-like
+  cone around the direction away from both ring bonds;
 * ``X`` atoms are surface sites, not real atoms: they take part in the
   geometry (so the binding direction is defined) but are kept as anchors in
   ``site_anchors`` and excluded from ``to_ase()`` unless you ask for the
@@ -337,13 +349,16 @@ class AdjacencyStructure:
     """
 
     def __init__(self, atom_specs, site_bond_length=DEFAULT_SITE_BOND,
-                 site_elements=None, site_bond_scale=1.0, bond_scales=None):
+                 site_elements=None, site_bond_scale=1.0, bond_scales=None,
+                 changing=None, unlocked=None):
         self.spec = atom_specs
         self.labels = sorted(atom_specs)
         self.site_bond_length = site_bond_length
         self.site_elements = dict(site_elements or {})
         self.site_bond_scale = site_bond_scale
         self.bond_scales = dict(bond_scales or {})
+        self.changing = {tuple(sorted(pair)) for pair in (changing or ())}
+        self.unlocked = {tuple(sorted(pair)) for pair in (unlocked or ())}
         self.neighbors = {label: sorted(atom_specs[label]["bonds"])
                           for label in self.labels}
         self.rings = find_rings(self.neighbors)
@@ -386,6 +401,12 @@ class AdjacencyStructure:
 
     def is_ring_atom(self, label):
         return any(label in ring for ring in self.rings)
+
+    def is_changing(self, a, b):
+        return tuple(sorted((a, b))) in self.changing
+
+    def is_unlocked(self, a, b):
+        return tuple(sorted((a, b))) in self.unlocked
 
     def bond_length(self, a, b):
         per_bond = self.bond_scales.get(tuple(sorted((a, b))), 1.0)
@@ -472,9 +493,11 @@ class AdjacencyStructure:
     def rotatable_bonds(self):
         """Free torsions: ``{(i, j): {"refs", "moves", "default"}}``.
 
-        A bond is rotatable when it is a single bond, not in a ring, does not
-        involve an X site, and both ends have at least two neighbors (there
-        is nothing to rotate on a terminal atom). The key is oriented so that
+        A bond is rotatable when it is a single bond (or a multiple bond in
+        ``unlocked``), not in a ring, does not involve an X site, and both
+        ends have at least two neighbors (there is nothing to rotate on a
+        terminal atom). An unlocked multiple bond defaults to 0 instead of
+        180, which is the geometry it would have had locked. The key is oriented so that
         ``i`` is on the start-atom side and the ``moves`` atoms hang off
         ``j``. The angle you pass to ``build`` is the dihedral
         refs[0] - i - j - refs[1] in degrees; refs are the lowest-label
@@ -486,7 +509,7 @@ class AdjacencyStructure:
             for b in self.neighbors[a]:
                 if a >= b:
                     continue
-                if self.bond_order(a, b) != 1.0:
+                if self.bond_order(a, b) != 1.0 and not self.is_unlocked(a, b):
                     continue
                 if tuple(sorted((a, b))) in self.ring_bonds:
                     continue
@@ -503,7 +526,7 @@ class AdjacencyStructure:
                 result[(i, j)] = {
                     "refs": (ref_i, ref_j),
                     "moves": self._moving_side(i, j),
-                    "default": 180.0,
+                    "default": 0.0 if self.is_unlocked(i, j) else 180.0,
                     "note": "dihedral %d-%d-%d-%d" % (ref_i, i, j, ref_j)}
         return result
 
@@ -524,7 +547,7 @@ class AdjacencyStructure:
         for key in ((i, j), (j, i)):
             if key in torsions:
                 return float(torsions[key])
-        return 180.0
+        return 0.0 if self.is_unlocked(i, j) else 180.0
 
     # -- build -------------------------------------------------------------
 
@@ -617,6 +640,9 @@ class AdjacencyStructure:
         if not new:
             return []
         anchored = [n for n in self.neighbors[j] if n in pos]
+        if len(anchored) >= 2:      # the first slot is the anti one, see below
+            hot = [n for n in new if self.is_changing(j, n)]
+            new = hot + [n for n in new if n not in hot]
         steric = self.steric_number(j)
         if self.element(j) == SITE_ELEMENT:
             steric = max(len(self.neighbors[j]), 1)
@@ -645,6 +671,42 @@ class AdjacencyStructure:
         for label, direction in zip(new, directions):
             pos[label] = center + direction * self.bond_length(j, label)
         return new
+
+    def _bridge_directions(self, j, anchored, units, pos):
+        """Three slots for an atom held by two ring bonds (a bridged TS ring).
+
+        If exactly one of the ring bonds is changing, the first slot is
+        exactly anti to it -- ``_place_neighbors`` puts a changing new
+        neighbor first, so the forming and breaking bond end up 180 deg
+        apart -- and the other two straddle the plane around the direction
+        away from everything placed so far. Otherwise the three sit in a
+        cone of half-angle 180 - tetrahedral around the direction away from
+        both ring bonds (a methyl umbrella)."""
+        u1, u2 = units
+        normal = np.cross(u1, u2)
+        if np.linalg.norm(normal) < 1e-8:
+            normal = _any_perp(u1)
+        normal = _unit(normal)
+        hot = [n for n in anchored if self.is_changing(j, n)]
+        if len(hot) == 1:
+            anti = -_unit(pos[hot[0]] - pos[j])
+            filler = -(u1 + u2 + anti)
+            if np.linalg.norm(filler) < 1e-8:
+                filler = _any_perp(anti)
+            filler = _unit(filler - np.dot(filler, normal) * normal)
+            half = math.radians(TETRA / 2.0)
+            return [anti,
+                    _unit(math.cos(half) * filler + math.sin(half) * normal),
+                    _unit(math.cos(half) * filler - math.sin(half) * normal)]
+        away = -(u1 + u2)
+        if np.linalg.norm(away) < 1e-8:
+            away = _any_perp(u1)
+        away = _unit(away)
+        tangent = np.cross(away, normal)
+        beta = math.radians(180.0 - TETRA)
+        return [_unit(math.cos(beta) * away
+                      + math.sin(beta) * (math.cos(a) * tangent + math.sin(a) * normal))
+                for a in (math.radians(k * 120.0) for k in range(3))]
 
     @staticmethod
     def _fresh_directions(steric):
@@ -684,7 +746,7 @@ class AdjacencyStructure:
         else:
             m_hat = _any_perp(axis)
 
-        locked = self.bond_order(i, j) > 1.0
+        locked = self.bond_order(i, j) > 1.0 and not self.is_unlocked(i, j)
         if locked or self.element(i) == SITE_ELEMENT:
             tau = 0.0
         else:
@@ -717,12 +779,14 @@ class AdjacencyStructure:
     def _directions_many_anchors(self, j, anchored, n_new, steric, pos):
         """Directions when two or more neighbors of ``j`` are already placed
         (ring atoms, junctions): the local frame is fully determined."""
+        units = [_unit(pos[n] - pos[j]) for n in anchored]
+        if len(units) == 2 and n_new == 3:
+            return self._bridge_directions(j, anchored, units, pos)
         if steric >= 5:
             raise AdjacencyListError(
-                "five-coordinate atom %d reached with %d placed neighbors; "
-                "only the single-anchor case is supported"
-                % (j, len(anchored)))
-        units = [_unit(pos[n] - pos[j]) for n in anchored]
+                "five-coordinate atom %d reached with %d placed neighbors and "
+                "%d to place; only one anchor, or two anchors with three to "
+                "place, is supported" % (j, len(anchored), n_new))
         if len(units) >= 3 or steric <= len(units) + 1:
             filler = -sum(units)
             if np.linalg.norm(filler) < 1e-8:

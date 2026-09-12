@@ -80,10 +80,7 @@ for reaction in reaction_set.reactions:
         for flip, ordered in enumerate((oxygens, oxygens[::-1])):
             sweep = PairSweep(ts, framework.atoms, ordered, **sweep_settings)
             if first:
-                print("  %d rotatable bond(s), %d swept %s; %d axial combination(s); "
-                      "%d builds per scale and pair"
-                      % (len(sweep.rotatable), len(sweep.torsion_keys),
-                         sweep.torsion_keys, len(sweep.axial_grid), sweep.n_builds))
+                print(sweep.describe())
                 first = False
 
             survivors = sweep.survivors()
