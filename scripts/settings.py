@@ -16,7 +16,7 @@ from _common import REPO
 # --------------------------------------------------------------------------
 
 CODE = "MOR"
-SITES = "T2-T4_5.65"       # one T label ("T4") for a single Al, or a pair name
+SITES = "T4"       # one T label ("T4") for a single Al, or a pair name
                            # from the table step 0 prints ("T2-T4_5.65") for two
 RUN_DIR = os.path.join("runs", "%s_%s" % (CODE, SITES))
 REACTIONS = "reaction.yaml"
@@ -82,6 +82,18 @@ TS_MAX_SPAN = 3.5               # A, O-O pairs further apart than this are not t
 TS_TORSION_STEPS = 6           # steps over 360 deg for every free torsion
 TS_ROLL_STEPS = 24              # steps over 360 deg about the O-O axis
 TS_SPAN_TOLERANCE = 0.4         # A, |fitted X-X span - d(O-O)| allowed
-TS_SITE_SCALE_RANGE = (1.0, 2.0, 0.1)   # X-atom bond scale tried: start, stop, step
-TS_BOND_STRETCH = {"form": 1.0, "break": 1.0}   # length factors for changing bonds
+TS_SITE_SCALE_RANGE = (1.0, 1.2, 0.1)   # X-atom bond scale tried: start, stop, step
+TS_BOND_STRETCH = {"form": 1.2, "break": 1.2}   # length factors for changing bonds
 TS_CLEARANCE_MIN = 1.5          # A, a guess whose best roll clears less is not written
+
+# --------------------------------------------------------------------------
+# step 6: filtering the TS guesses
+# --------------------------------------------------------------------------
+
+TS_RMSD_THRESHOLD = 2.0         # A, guesses closer than this (adsorbate RMSD, same
+                                # pair and direction) are one guess; the roomiest
+                                # member stands for the cluster. ~0.8 merges a 60 deg
+                                # tail rotation, ~2 would also merge the C=C swaps
+TS_KEEP_PER_DIRECTION = None    # cap on clusters kept per pair and direction, or
+                                # None for no cap; 1 keeps only the roomiest guess
+                                # of flip0 and of flip1
