@@ -14,3 +14,7 @@ check_run/
 *.traj
 *.pyc
 runs/
+openmm/ts_guess.xyz
+openmm/ts_guess.json
+openmm/ts_guess_openmm.xyz
+openmm/minimize.traj
