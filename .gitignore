@@ -18,3 +18,9 @@ openmm/ts_guess.xyz
 openmm/ts_guess.json
 openmm/ts_guess_openmm.xyz
 openmm/minimize.traj
+openmm/guesses/
+openmm/collected_configs/
+openmm/data/
+openmm/*.traj
+openmm/ts_guess*.xyz
+openmm/ts_guess*.json
