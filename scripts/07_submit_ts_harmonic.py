@@ -16,7 +16,9 @@ Every guess is checked against the graph first (atom count, and the element
 at every mapped index); a guess that fails is reported and not submitted.
 
 settings.SUBMIT = False writes everything but job submission (dry run).
-Guesses that already have ts_harmonic.xyz are skipped. Each job runs
+Guesses that already have ts_harmonic.xyz are skipped, and so are guesses
+submitted before whose job has not finished (job.id is in their folder;
+delete the folder to resubmit a failed one). Each job runs
 scripts/ts_harmonic_one.py from this checkout, so keep it where it is until
 the jobs have started.
 """
@@ -93,7 +95,7 @@ wanted = settings.TS_HARMONIC_REACTIONS
 print("%s: %d framework atoms, reactions %s"
       % (settings.RUN_DIR, n_framework, "all" if wanted is None else list(wanted)))
 
-n_jobs = n_done = n_bad = 0
+n_jobs = n_done = n_queued = n_bad = 0
 for reaction_name, reaction_dir in layout.species_dirs(run.ts_unique):
     index = int(reaction_name.split("_")[0])
     if wanted is not None and index not in wanted:
@@ -111,7 +113,7 @@ for reaction_name, reaction_dir in layout.species_dirs(run.ts_unique):
     shutil.copy2(os.path.join(reaction_dir, layout.REACTION_INFO),
                  os.path.join(target_dir, layout.REACTION_INFO))
 
-    counts = {"submit": 0, "done": 0, "bad": 0}
+    counts = {"submit": 0, "done": 0, "queued": 0, "bad": 0}
     for relative, xyz in layout.initial_guess_files(reaction_dir):
         pair, stem = relative.split(os.sep)
         guess = info["pairs"][pair]["guesses"][stem]
@@ -123,6 +125,11 @@ for reaction_name, reaction_dir in layout.species_dirs(run.ts_unique):
         if os.path.exists(os.path.join(job_dir, layout.TS_HARMONIC_STRUCTURE)):
             print("  already done   %s" % relative)
             counts["done"] += 1
+            continue
+        if os.path.exists(os.path.join(job_dir, layout.JOB_ID)):
+            with open(os.path.join(job_dir, layout.JOB_ID)) as handle:
+                print("  in the queue   %s  (job %s, no result yet)" % (relative, handle.read().strip()))
+            counts["queued"] += 1
             continue
 
         atoms = read(xyz)
@@ -148,17 +155,20 @@ for reaction_name, reaction_dir in layout.species_dirs(run.ts_unique):
             print("  %s -> %s" % (relative, result.stdout.strip() or result.stderr.strip()))
             if result.returncode != 0:
                 sys.exit("sbatch failed, stopping")
+            with open(os.path.join(job_dir, layout.JOB_ID), "w") as handle:
+                handle.write(result.stdout.strip().split()[-1] + "\n")
         else:
             print("  would submit   %s" % relative)
         counts["submit"] += 1
 
-    print("  %d %s, %d already done, %d not submitted"
+    print("  %d %s, %d already done, %d in the queue, %d not submitted"
           % (counts["submit"], "submitted" if settings.SUBMIT else "to submit",
-             counts["done"], counts["bad"]))
+             counts["done"], counts["queued"], counts["bad"]))
     n_jobs += counts["submit"]
     n_done += counts["done"]
+    n_queued += counts["queued"]
     n_bad += counts["bad"]
 
-print("\n%d guesses %s, %d already done, %d not submitted  (%s)"
+print("\n%d guesses %s, %d already done, %d in the queue, %d not submitted  (%s)"
       % (n_jobs, "submitted" if settings.SUBMIT else "would be submitted",
-         n_done, n_bad, run.ts_harmonic))
+         n_done, n_queued, n_bad, run.ts_harmonic))

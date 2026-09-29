@@ -20,6 +20,8 @@ Module map, in workflow order:
     adjlist      AdjacencyStructure: 3D coordinates from an adjacency list
     ts_graph     TSGraph + PairSweep: TS guesses from the reaction graph (step 5)
     ts_harmonic_relax  staged spring pre-relax of one TS guess with MACE (step 7)
+    ts_sella     Sella saddle search + frequency check of one TS start  (step 8)
+    ts_summary   table + figure of every Sella run                  (step 9)
 
 Every numeric default lives next to the function that uses it, as a
 keyword argument; the step scripts pass their own values from

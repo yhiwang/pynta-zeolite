@@ -16,6 +16,9 @@ same way and changing the layout means changing this file::
     <run_dir>/TS_harmonic/<i>_rxn/info.json                      step 7
     <run_dir>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz, ts_bonds.json
     <run_dir>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/ts_harmonic.*
+    <run_dir>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/start.xyz, ts_bonds.json   step 8
+    <run_dir>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/ts_sella.xyz, sella.*, vib*, result.json
+    <run_dir>/TS_sella/ts_summary.csv, ts_summary.png             step 9
     
 ``<site>`` is the zero-padded index into the framework's ``mono_sites`` (or
 ``bi_sites``), ``<stem>`` the orientation name from ``pyntaz.placement``
@@ -44,6 +47,8 @@ RELAXED_STRUCTURE = "relax.xyz"       # written by relax_one.py, carries energy 
 RELAX_TRAJECTORY = "relax.traj"
 RELAX_LOG = "relax.log"
 JOB_SCRIPT = "job.sh"
+JOB_ERR = "job.err"                   # SLURM stderr of a job
+JOB_ID = "job.id"                     # SLURM id, written by steps 7-8 after sbatch
 SPECIES_INFO = "info.json"            # adsorbates.species_info() record
 REACTION_INFO = "info.json"           # TS_guesses/<i>_rxn/: reaction + pair manifest
 SWEEP_TRAJECTORY = "sweep.traj"       # every roll of every survivor, for ase gui
@@ -52,6 +57,14 @@ TS_BONDS_JSON = "ts_bonds.json"       # TS_harmonic/.../<stem>/: reacting bonds 
 TS_HARMONIC_STRUCTURE = "ts_harmonic.xyz"   # written by ts_harmonic_one.py, MACE energy + forces
 TS_HARMONIC_TRAJECTORY = "ts_harmonic.traj"
 TS_HARMONIC_LOG = "ts_harmonic.log"
+TS_START = "start.xyz"                # TS_sella/.../<start>/: the structure Sella starts from
+TS_SELLA_STRUCTURE = "ts_sella.xyz"   # written by ts_sella_one.py, MACE energy + forces
+TS_SELLA_TRAJECTORY = "sella.traj"
+TS_SELLA_LOG = "sella.log"
+TS_SELLA_VIB = "vib"                  # vibration cache dir; the first mode goes to vib.0.traj
+TS_SELLA_RESULT = "result.json"       # verdict, energies, frequencies; written last
+TS_SUMMARY_CSV = "ts_summary.csv"     # TS_sella/: step 9 table, one row per guess and start
+TS_SUMMARY_PNG = "ts_summary.png"     # TS_sella/: step 9 figure
 GAS_SITE = "0"                        # site folder of a gas-phase species
 
 
@@ -67,6 +80,7 @@ class RunLayout:
         self.ts_guesses = os.path.join(run_dir, "TS_guesses")
         self.ts_unique = os.path.join(run_dir, "TS_unique")
         self.ts_harmonic = os.path.join(run_dir, "TS_harmonic")
+        self.ts_sella = os.path.join(run_dir, "TS_sella")
         self.plots = run_dir
 
     def __repr__(self):

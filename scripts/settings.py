@@ -104,7 +104,7 @@ TS_KEEP_PER_DIRECTION = None    # cap on clusters kept per pair and direction, o
 # --------------------------------------------------------------------------
 
 TS_HARMONIC_REACTIONS = None    # None: every reaction in TS_unique; or e.g. [0, 3]
-TS_HARMONIC_MULT = {"form": 1.35, "break": 1.35}   # spring target = (r_i + r_j) x this,
+TS_HARMONIC_MULT = {"form": 1.2, "break": 1.2}   # spring target = (r_i + r_j) x this,
                                 # r = covalent radius; "order" bonds get no spring
 TS_HARMONIC_K = 30.0            # eV/A^2, spring constant
 TS_HARMONIC_FRAMEWORK_RADIUS = 4.0   # A, framework atoms this close to the adsorbate
@@ -115,4 +115,23 @@ TS_HARMONIC_MAX_CYCLES = 3      # framework -> spectators -> reacting cycles at 
 TS_HARMONIC_E_TOL = 0.01        # eV, stop cycling when a cycle changes E by less
 TS_HARMONIC_FMAX = 0.05         # eV/A, per stage
 TS_HARMONIC_SLURM_CORES = 4
-TS_HARMONIC_SLURM_TIME = "02:00:00"
+TS_HARMONIC_SLURM_TIME = "01:00:00"
+
+# --------------------------------------------------------------------------
+# step 8: Sella saddle search on the TS guesses (one SLURM job per guess and
+# start; SUBMIT, PYTHON, MACE_MODEL, account, partition and memory as in step 2)
+# --------------------------------------------------------------------------
+
+TS_SELLA_REACTIONS = None       # None: every reaction in TS_harmonic; or e.g. [0, 3]
+TS_SELLA_STARTS = ("harmonic", "raw")   # "harmonic": step 7's ts_harmonic.xyz,
+                                # "raw": the unrelaxed step 5 guess; drop one to skip it
+TS_SELLA_FMAX = 0.05            # eV/A, converged when every free atom is below this
+TS_SELLA_STEPS = 300            # Sella steps at most
+TS_SELLA_INTERNAL = False       # Sella internal coordinates; try True if Cartesian stalls
+TS_SELLA_FREE_RADIUS = TS_HARMONIC_FRAMEWORK_RADIUS   # A, the same region step 7 relaxed
+TS_SELLA_VIB_DELTA = 0.01       # A, finite-difference step of the frequency check
+TS_SELLA_IMAG_CUTOFF = 50.0     # cm-1, smaller imaginary modes count as noise
+TS_SELLA_MODE_MIN = 0.2         # the one imaginary mode must stretch a reacting bond by
+                                # at least this (unit mode) for the verdict "ts"
+TS_SELLA_SLURM_CORES = 4
+TS_SELLA_SLURM_TIME = "03:00:00"
