@@ -1,105 +1,258 @@
 # pyntaz — adsorbates and transition-state guesses in zeolite pores
 
-Pynta-style workflow for a Brønsted-acid zeolite: build the framework, place
-every species from `reaction.yaml` on every first-shell oxygen of the Al,
-relax with MACE on HPC2, keep what survived, pair the minima into TS
-endpoints and construct a TS guess for each pair.
+A Pynta-style workflow adapted to Brønsted-acid zeolites. From an IZA
+framework and a set of reactions written as RMG adjacency lists, pyntaz
 
-```
-new/
-├── README.md, MIGRATION.md    this file; old-name -> new-name table
-├── reaction.yaml              reaction set (RMG adjacency lists, X = framework site)
-├── data/MOR.cif               maze reads ./data/<CODE>.cif (falls back to IZA download)
-├── models/                    put mace-mpa-0-medium.model here (or set PYNTAZ_MODEL)
-├── pyntaz/                    importable library -- no script logic in here
-│   ├── config.py     machine paths (PYNTAZ_* env overrides), RunLayout, every threshold
-│   ├── geometry.py   neighbor lists, framework/adsorbate split, clashes, clearance, RMSD, Kabsch
-│   ├── framework.py  build_framework("MOR", "T4") -> ZeoliteFramework + sites
-│   ├── reactions.py  load_reaction_set("reaction.yaml") -> ReactionSet(species, adjlists, reactions)
-│   ├── placement.py  place_monodentate / place_bidentate sweeps; orientation stem <-> tag
-│   ├── adsorbates.py every species x every site -> Adsorbates/ tree + info.json     (step 1)
-│   ├── runtree.py    walk / read / copy the run directory (the only module that knows the layout)
-│   ├── relax.py      relax_structure(xyz) with MACE; slurm_job_script(...)          (step 2)
-│   ├── filtering.py  bond-survival test + RMSD clustering                            (step 3)
-│   ├── plotting.py   energy-vs-orientation figures                                   (step 4)
-│   ├── ts_pairs.py   reactant/product minima -> ts_guesses/<i>_rxn/pair_NNNN         (step 5)
-│   └── ts_guess.py   graph matching, InsertionPlan, TSGuessBuilder                   (step 6)
-└── scripts/          one runnable per workflow step, in order; all take --run-dir and -h
-    ├── 01_build_adsorbates.py     --code MOR --t-site T4
-    ├── 02_submit_relax.py         dry run; --submit to sbatch
-    ├── relax_one.py               SLURM worker, copied into every job directory
-    ├── 03_filter_relax.py
-    ├── 04_plot_relax_sweep.py     optional
-    ├── 05_setup_ts_pairs.py
-    ├── 06_build_ts_guesses.py     --rxn 1_rxn --pair pair_0001 for a verbose trace
-    ├── place_one_adsorbate.py     try one adjacency list without editing reaction.yaml
-    └── compare_runs.py            diff two run directories numerically
-```
+1. builds the bare framework with one or two Al and finds the acid-site oxygens,
+2. places every species on every site and relaxes it with MACE,
+3. keeps the relaxed configurations that held together and deduplicates them,
+4. builds transition-state guesses straight from each reaction's graph,
+   seated on pairs of framework oxygens,
 
-## Running
+and (in `openmm/`, still experimental) refines those guesses and optimizes
+them to saddle points with Sella.
 
-From the repo root (`scripts/_common.py` puts the repo on `sys.path`, so no
-install is needed):
+Everything runs on CPU. MACE relaxations are submitted as SLURM jobs.
+
+---
+
+## Installation
+
+Tested on Hive (UC Davis), CPU-only, Python 3.9. All commands run from the
+repo root.
+
+### 1. Code and environment
 
 ```bash
-python scripts/01_build_adsorbates.py --code MOR --t-site T4      # -> test_run/Adsorbates
-python scripts/02_submit_relax.py                                 # dry run: job dirs + job.sh
-python scripts/02_submit_relax.py --submit                        # on HPC2
-python scripts/03_filter_relax.py                                 # -> *_filtered, *_unique
-python scripts/04_plot_relax_sweep.py                             # -> test_run/<species>_sweep.png
-python scripts/05_setup_ts_pairs.py                               # -> test_run/ts_guesses
-python scripts/06_build_ts_guesses.py                             # -> ts_guess.xyz per pair
-python scripts/06_build_ts_guesses.py --rxn 1_rxn --pair pair_0001   # one pair, full trace
+git clone https://github.com/yhiwang/pynta-zeolite.git
+cd pynta-zeolite
+
+module load conda                        # on Hive
+conda env create -f environment.yml      # creates pyntaz-slim
+conda activate pyntaz-slim
+pip install -e .                         # pyntaz itself, editable
 ```
 
-Every script takes `--run-dir` (default `test_run`). Machine-specific settings
-live at the top of `pyntaz/config.py` and can be overridden without editing:
-`PYNTAZ_REPO`, `PYNTAZ_PYTHON`, `PYNTAZ_MODEL`, `PYNTAZ_SLURM_ACCOUNT`,
-`PYNTAZ_SLURM_PARTITION`. `job.sh` exports `PYNTAZ_REPO` as `PYTHONPATH`,
-which is how `relax_one.py` finds `pyntaz` on the compute node.
+The versions in `environment.yml` are pinned on purpose:
 
-Dependencies: ase (maze 0.1.1 needs ase <= 3.23), maze-sim, RMG `molecule`,
-pynta (for `get_adsorbate` / `get_name`), mace-torch (only for relaxation),
-networkx, pyyaml, matplotlib. `pyntaz.relax` / `pyntaz.filtering` import only
-ase + numpy, so the relax worker and the filter run without maze or RMG.
+| package | pin | why |
+|---|---|---|
+| numpy | 1.26.4 | rmgmolecule breaks on numpy 2 |
+| cython | 0.29 | rmgmolecule needs cython < 3 |
+| ase | 3.26.0 | the version maze, MACE and Sella were tested with |
+| torch | 2.8.0+cpu | CPU build; the default PyPI torch is the multi-GB CUDA build |
+| matscipy | 1.1.1 | 1.2.0 requires numpy >= 2 |
+| sella | 2.5.0 | 2.6.0 has no Python 3.9 wheel |
+| setuptools | < 81 | maze imports `pkg_resources`, which setuptools 81 removes |
 
-## Data layout (unchanged)
+Don't `pip install` into this environment without pinning versions. An
+unpinned install can quietly upgrade numpy or ASE and break rmgmolecule or
+maze. Run `pip install --dry-run ...` first and read the "Would install" line.
 
-```
-<run_dir>/Adsorbates/<species>/<site>/<stem>/<stem>_init.xyz     initial guesses
-<run_dir>/Adsorbates/<species>/info.json                         index maps, tags per config
-<run_dir>/Adsorbates_relax/<species>/<site>/<stem>/relax.{xyz,traj,log}
-<run_dir>/Adsorbates_relax_filtered/<species>/<site>/<stem>.xyz  survivors
-<run_dir>/Adsorbates_relax_unique/<species>/<site>/<stem>.xyz    deduplicated minima
-<run_dir>/ts_guesses/<i>_rxn/info.json                            reaction + pairs manifest
-<run_dir>/ts_guesses/<i>_rxn/pair_NNNN/{initial,final,endpoint_*,ts_guess}.xyz
-```
+### 2. MACE model
 
-`<site>` is the zero-padded index into `framework.mono_sites` (`0` for
-gas); `<stem>` is `degrees_045` (monodentate spin angle from the O→Al
-direction), `flip0_phi105_psi240` (bidentate) or `gas`.
-`placement.orientation_stem` / `parse_orientation_stem` convert between stems
-and tags. `info.json` keys are unchanged, so existing run directories keep
-working with the new scripts.
-
-## Reading the library
-
-Start with `pyntaz/__init__.py` (module map), then read the modules in
-workflow order. Each module docstring says *why*, each function docstring
-*what*. Nothing in `pyntaz/` reads `sys.argv` or hard-codes `test_run`;
-that is all in `scripts/`. Variable names are spelled out (`bridge_axis`,
-`bond_length_o1`, `framework_positions`), single letters only for `i, j`
-loop indices.
-
-## Checking a change did not alter the numbers
+Compute nodes have no internet, so the model has to be a local file:
 
 ```bash
-python scripts/compare_runs.py old_run new_run
+mkdir -p models
+wget -P models https://github.com/ACEsuit/mace-foundations/releases/download/mace_mpa_0/mace-mpa-0-medium.model
 ```
-compares every `.xyz` (symbols, cell, positions) and `.json` in both trees.
-This reorganisation was checked that way against the previous scripts:
-197 initial guesses + info.json (step 1, plus a 3456-structure bidentate
-sweep), 104 filtered / 25 unique configs (step 3), the three sweep PNGs
-(step 4, byte-identical), 118 pair manifests (step 5) and all 118
-`ts_guess.xyz` / `endpoint_*.xyz` (step 6) are identical to the old output,
-as are the step 3/5/6 logs and the verbose one-pair trace.
+
+`scripts/settings.py` expects `models/mace-mpa-0-medium.model`. Set
+`PYNTAZ_MODEL` to use another file. `models/` is gitignored.
+
+### 3. Check
+
+```bash
+python -c "import importlib.metadata, sella, ase, numpy, torch; from mace.calculators import mace_mp; print('sella', importlib.metadata.version('sella'), '| ase', ase.__version__, '| numpy', numpy.__version__, '| torch', torch.__version__)"
+python -c "from molecule.molecule import Molecule; print('rmgmolecule ok')"
+python -c "from maze.zeolite import Zeolite; print('maze ok,', len(Zeolite.make('MOR')), 'atoms in MOR')"
+```
+
+Expected: `sella 2.5.0 | ase 3.26.0 | numpy 1.26.4 | torch 2.8.0+cpu`,
+`rmgmolecule ok`, `maze ok, 144 atoms in MOR`. Two warnings are harmless:
+`pkg_resources is deprecated` (from maze) and `crystal system 'orthorhombic'
+is not interpreted ...` (from ASE reading the cif).
+
+### Troubleshooting
+
+- **Imports pick up the wrong versions.** Check `echo $PYTHONPATH`. A
+  leftover entry from an old environment or a pynta checkout wins over the
+  env; `unset PYTHONPATH` before activating.
+- **`conda activate` does nothing in a SLURM job.** Jobs call the env's
+  python directly: `settings.PYTHON`, default
+  `~/.conda/envs/pyntaz-slim/bin/python`, override with `PYNTAZ_PYTHON`.
+- **MACE tries to download a model on a compute node.** It was given a model
+  name instead of a file path; see step 2.
+- **`import openmm` fails.** Only `openmm/02_openmm_restrain.py` needs it.
+
+---
+
+## Repository layout
+
+```
+pynta-zeolite/
+├── README.md, environment.yml, pyproject.toml
+├── reaction.yaml         the reaction set (RMG adjacency lists, X = framework oxygen site)
+├── data/                 MOR.cif, MFI.cif; maze reads ./data/<CODE>.cif, else downloads from IZA
+├── models/               the MACE model file (gitignored)
+├── pyntaz/               the library; no script logic, nothing reads sys.argv
+│   ├── framework.py      build_framework(): supercell, Al substitution, sites and site pairs
+│   ├── adjlist.py        3D geometry from an adjacency list: rings, torsions, X sites
+│   ├── reactions.py      reaction.yaml -> RMG molecules
+│   ├── pynta_mol.py      get_adsorbate / get_name, vendored from pynta
+│   ├── placement.py      monodentate and bidentate orientation sweeps
+│   ├── adsorbates.py     every species on every site                  (step 1)
+│   ├── relax.py          MACE relaxation, framework frozen             (step 2)
+│   ├── filtering.py      bond-survival test and RMSD clustering        (step 3)
+│   ├── plotting.py       energy across the placement sweep             (step 4)
+│   ├── ts_graph.py       TS guesses from the merged reaction graph     (step 5)
+│   └── geometry.py       neighbor lists, framework/adsorbate split, clashes, RMSD
+├── scripts/              one script per step, run in order
+│   ├── settings.py       EVERY setting for a run: framework, sites, thresholds, SLURM
+│   ├── layout.py         the only file that knows the run-directory layout
+│   ├── 00_build_framework.py ... 06_filter_ts_guesses.py
+│   └── helpers: relax_one.py (SLURM worker), place_one_adsorbate.py,
+│                rotate_chain.py, demo_framework.py, compare_runs.py
+├── openmm/               experimental TS refinement, see below
+├── tests/                standalone checks, print PASS/FAIL
+└── archive/              the old endpoint-pair TS route, kept for reference
+```
+
+---
+
+## Running the main workflow
+
+Edit `scripts/settings.py`, then run the steps in order from the repo root.
+The scripts take no command-line flags; `settings.py` is the one place a
+run is defined.
+
+The key settings:
+
+- `CODE`: the framework, e.g. `"MOR"`.
+- `SITES`: one T label (`"T4"`) for a single Al, or a pair name from the
+  table step 0 prints (`"T2-T4_5.65"`) for two Al.
+- `SITE_RULE`: with two Al, `"cross"` keeps only O pairs with one O on each
+  Al; `"all"` keeps every first-shell O and pair. It is saved with the
+  framework, so don't change it inside an existing run directory.
+
+Output goes to `runs/<CODE>_<SITES>/`.
+
+```bash
+python scripts/00_build_framework.py     # bare framework + sites
+python scripts/01_build_adsorbates.py    # every species on every site
+python scripts/02_submit_relax.py        # one MACE job per config (SUBMIT=False: dry run)
+python scripts/03_filter_relax.py        # after the jobs finish: survivors, unique minima
+python scripts/04_plot_relax_sweep.py    # optional: energy vs orientation
+python scripts/05_build_ts_guesses.py    # TS guesses from reaction.yaml, needs only step 0
+python scripts/06_filter_ts_guesses.py   # distinct TS guesses + site x site count plot
+```
+
+Steps 5–6 don't need steps 1–4: TS guesses are built from the reaction
+graph and the framework alone.
+
+### Run directory
+
+```
+runs/<CODE>_<SITES>/
+├── bare.xyz, framework.json, <CODE>_pairs.json                  step 0
+├── Adsorbates/<species>/<site>/<stem>/<stem>_init.xyz           step 1  (+ info.json per species)
+├── Adsorbates_relax/<species>/<site>/<stem>/relax.{xyz,traj,log}  step 2
+├── Adsorbates_relax_filtered/<species>/<site>/<stem>.xyz        step 3
+├── Adsorbates_relax_unique/<species>/<site>/<stem>.xyz          step 3
+├── <species>_sweep.png                                          step 4
+├── TS_guesses/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz           step 5  (+ info.json, sweep.traj)
+└── TS_unique/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz            step 6  (+ info.json, pair_counts.png)
+```
+
+`<site>` is the zero-padded index into the framework's site list (`0/gas`
+for a gas-phase molecule). `<stem>` names the orientation:
+`degrees_045` (monodentate), `flip0_phi105_psi240` (bidentate),
+`flip0_tor045-120_ax1_roll090` (TS guess).
+
+---
+
+## reaction.yaml
+
+Each reaction gives reactant and product as RMG adjacency lists over the
+same labelled atoms. `X` atoms are framework oxygen sites, bonded to
+whatever sits on that oxygen (the acid proton, an alkoxide carbon). Starred labels
+(`*1`, `*2`, ...) mark the atoms that change bonds.
+
+```yaml
+- index: 0
+  reactant: |
+    1 *1 C u0 p0 c0 {2,D} {3,S} {4,S}
+    ...
+    7 *3 H u0 p0 c0 {8,S}
+    8 *4 X u0 p0 c0 {7,S}
+    9 *5 X u0 p0 c0
+  product: |
+    ...
+  reaction: C=C + [H][Pt] <=> CC[Pt]
+  reaction_family: Surface_Protonation
+```
+
+The current set follows ethylene through dimerization, β-H elimination,
+reprotonation and methyl shift (reactions 0–6).
+
+---
+
+## TS refinement (`openmm/`, experimental)
+
+A self-contained test bed for turning TS guesses into saddle points before
+it moves into `scripts/`. Settings sit at the top of each script.
+
+```bash
+cd openmm
+python 01_make_ts_guess.py            # one guess per reaction on one O pair -> guesses/<i>_rxn/
+python 03_mace_fixed.py               # staged MACE pre-relax with springs on the reacting bonds
+python 04_sella_ts.py guesses/0_rxn   # Sella saddle search from the raw and pre-relaxed guesses
+```
+
+- `01` writes `ts_guess.xyz` and `ts_guess.json` (the framework size, the
+  seated oxygens and every forming or breaking bond as atom indices).
+- `02_openmm_restrain.py` is an earlier spring-only relax in OpenMM, kept
+  for reference.
+- `03` alternates a spectator relax and a restrained relax of the reacting
+  atoms, framework fixed, and writes `ts_guess_mace.xyz`.
+- `04` runs Sella (order 1) with MACE from each start, then checks the
+  saddle with finite-difference frequencies: how many imaginary modes, and
+  how much the first one stretches each reacting bond.
+
+Every script loops over `guesses/*_rxn/`, or only the directories named on
+the command line.
+
+---
+
+## Tests
+
+Each test runs as a plain script and prints PASS/FAIL:
+
+```bash
+python tests/test_adjlist.py
+python tests/test_framework_sites.py
+python tests/test_beta_h_elim.py
+python tests/test_methyl_shift.py
+```
+
+To check that a code change didn't alter any numbers, run the old and new
+code into two run directories and compare them file by file:
+
+```bash
+python scripts/compare_runs.py runs/old runs/new
+```
+
+---
+
+## Machine settings
+
+Machine-specific values in `scripts/settings.py` can be overridden without
+editing, through environment variables:
+
+| variable | default |
+|---|---|
+| `PYNTAZ_PYTHON` | `~/.conda/envs/pyntaz-slim/bin/python` |
+| `PYNTAZ_MODEL` | `models/mace-mpa-0-medium.model` |
+| `PYNTAZ_SLURM_ACCOUNT` | `ark245grp` |
+| `PYNTAZ_SLURM_PARTITION` | `high` |

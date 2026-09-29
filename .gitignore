@@ -24,3 +24,6 @@ openmm/data/
 openmm/*.traj
 openmm/ts_guess*.xyz
 openmm/ts_guess*.json
+openmm/mace_relax/
+openmm/sella/
+openmm/jobs/

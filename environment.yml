@@ -1,17 +1,35 @@
+# pyntaz-slim: CPU-only environment for pyntaz (framework build, placement,
+# MACE relaxations, TS guesses, Sella). Versions are the ones verified
+# together on Hive (2026-09-24). Create with:
+#     conda env create -f environment.yml
 name: pyntaz-slim
 channels:
   - conda-forge
-  - mjohnson541
+  - mjohnson541          # rmgmolecule
 dependencies:
   - python=3.9
-  - numpy=1.26
-  - ase=3.22.1
+  - numpy=1.26.4         # rmgmolecule needs numpy<2
+  - scipy=1.13.1
+  - cython=0.29.37       # rmgmolecule needs cython<3
   - rmgmolecule=0.3.0
-  - cython<3
-  - networkx>=3.0
-  - pyyaml
-  - matplotlib
-  - scipy
+  - rdkit=2025.03.5
+  - networkx=3.2.1
+  - pyyaml=6.0.2
+  - matplotlib=3.9.4
+  - setuptools<81        # maze imports pkg_resources, removed in setuptools 81
   - pip
   - pip:
-      - maze-sim
+      # CPU-only torch; without this index pip pulls the multi-GB CUDA build
+      - --extra-index-url https://download.pytorch.org/whl/cpu
+      - torch==2.8.0+cpu
+      - numpy==1.26.4    # repeated so pip never upgrades it
+      - ase==3.26.0
+      - maze-sim==0.1.1
+      - mace-torch==0.3.16
+      - e3nn==0.4.4
+      - matscipy==1.1.1  # last release that allows numpy<2 (1.2.0 wants numpy>=2)
+      - sella==2.5.0     # last release with a Python 3.9 wheel
+      - jax==0.4.30
+      - jaxlib==0.4.30
+      - openmm==8.1.1
+      - -e .             # pyntaz itself, editable
