@@ -13,6 +13,9 @@ same way and changing the layout means changing this file::
     <run_dir>/TS_guesses/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz
     <run_dir>/TS_guesses/<i>_rxn/pair_<k>/sweep.traj
     <run_dir>/TS_unique/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz    step 6
+    <run_dir>/TS_harmonic/<i>_rxn/info.json                      step 7
+    <run_dir>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz, ts_bonds.json
+    <run_dir>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/ts_harmonic.*
     
 ``<site>`` is the zero-padded index into the framework's ``mono_sites`` (or
 ``bi_sites``), ``<stem>`` the orientation name from ``pyntaz.placement``
@@ -45,6 +48,10 @@ SPECIES_INFO = "info.json"            # adsorbates.species_info() record
 REACTION_INFO = "info.json"           # TS_guesses/<i>_rxn/: reaction + pair manifest
 SWEEP_TRAJECTORY = "sweep.traj"       # every roll of every survivor, for ase gui
 PAIR_TABLE = "pair_counts.png"        # TS_unique/<i>_rxn/: site x site guess counts
+TS_BONDS_JSON = "ts_bonds.json"       # TS_harmonic/.../<stem>/: reacting bonds as atom indices
+TS_HARMONIC_STRUCTURE = "ts_harmonic.xyz"   # written by ts_harmonic_one.py, MACE energy + forces
+TS_HARMONIC_TRAJECTORY = "ts_harmonic.traj"
+TS_HARMONIC_LOG = "ts_harmonic.log"
 GAS_SITE = "0"                        # site folder of a gas-phase species
 
 
@@ -59,6 +66,7 @@ class RunLayout:
         self.unique = os.path.join(run_dir, "Adsorbates_relax_unique")
         self.ts_guesses = os.path.join(run_dir, "TS_guesses")
         self.ts_unique = os.path.join(run_dir, "TS_unique")
+        self.ts_harmonic = os.path.join(run_dir, "TS_harmonic")
         self.plots = run_dir
 
     def __repr__(self):

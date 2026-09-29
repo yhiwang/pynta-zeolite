@@ -97,3 +97,22 @@ TS_RMSD_THRESHOLD = 2.0         # A, guesses closer than this (adsorbate RMSD, s
 TS_KEEP_PER_DIRECTION = None    # cap on clusters kept per pair and direction, or
                                 # None for no cap; 1 keeps only the roomiest guess
                                 # of flip0 and of flip1
+
+# --------------------------------------------------------------------------
+# step 7: harmonic pre-relax of the TS guesses (one SLURM job per guess;
+# SUBMIT, PYTHON, MACE_MODEL, account, partition and memory as in step 2)
+# --------------------------------------------------------------------------
+
+TS_HARMONIC_REACTIONS = None    # None: every reaction in TS_unique; or e.g. [0, 3]
+TS_HARMONIC_MULT = {"form": 1.35, "break": 1.35}   # spring target = (r_i + r_j) x this,
+                                # r = covalent radius; "order" bonds get no spring
+TS_HARMONIC_K = 30.0            # eV/A^2, spring constant
+TS_HARMONIC_FRAMEWORK_RADIUS = 4.0   # A, framework atoms this close to the adsorbate
+                                # relax in the framework stage; use the same free
+                                # region in the saddle search after this
+TS_HARMONIC_STEPS = {"framework": 100, "spectators": 20, "reacting": 100}  # BFGS cap per stage
+TS_HARMONIC_MAX_CYCLES = 3      # framework -> spectators -> reacting cycles at most
+TS_HARMONIC_E_TOL = 0.01        # eV, stop cycling when a cycle changes E by less
+TS_HARMONIC_FMAX = 0.05         # eV/A, per stage
+TS_HARMONIC_SLURM_CORES = 4
+TS_HARMONIC_SLURM_TIME = "02:00:00"
