@@ -4,7 +4,8 @@ framework once, seat every reaction on the same oxygen pair, keep the
 best clearance over both flips. The sweep settings mirror
 scripts/settings.py so each guess is the one step 5 would make.
 
-Reads  reaction.yaml   (next to this file)
+Reads  reaction.yaml   (next to this file); only the reaction indices named
+       on the command line if any (python 01_make_ts_guess.py 0 3)
 Writes guesses/<i>_rxn/ts_guess.xyz and ts_guess.json for reaction i:
        nslab, the seated oxygens, and every forming/breaking bond as
        indices into ts_guess.xyz
@@ -25,6 +26,7 @@ from pyntaz.ts_graph import TSGraph, PairSweep
 HERE = os.path.dirname(os.path.abspath(__file__))
 REACTIONS = os.path.join(HERE, "reaction.yaml")
 OUT = os.path.join(HERE, "guesses")
+ONLY = {int(arg) for arg in sys.argv[1:]}   # empty: every reaction
 
 # the run (settings.py: CODE, SITES)
 CODE = "MOR"
@@ -57,6 +59,11 @@ print("%s %s: %d atoms, pair_%02d = %s O%d / %s O%d, %.2f A"
 # -- the reactions ---------------------------------------------------------
 with open(REACTIONS) as handle:
     reactions, _ = parse_reactions(handle.read())
+if ONLY:
+    missing = ONLY - {reaction["index"] for reaction in reactions}
+    if missing:
+        raise SystemExit("no reaction with index %s in %s" % (sorted(missing), REACTIONS))
+    reactions = [reaction for reaction in reactions if reaction["index"] in ONLY]
 print("%d reactions in %s\n" % (len(reactions), os.path.basename(REACTIONS)))
 
 
