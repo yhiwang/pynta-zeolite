@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Step 4 (optional) -- plot relaxation energy across the placement sweep,
+"""Plot relaxation energy across the placement sweep,
 one PNG per species, written into the run directory.
 
 Reads <RUN_DIR>/Adsorbates_relax/<species>/<site>/<stem>/relax.log and marks
@@ -13,7 +13,7 @@ import sys
 import _common  # noqa: F401
 import layout
 import settings
-from pyntaz.plotting import parse_optimizer_log, plot_species_sweep
+from plotting import parse_optimizer_log, plot_species_sweep
 
 
 def collect_energies(species_relax_dir):

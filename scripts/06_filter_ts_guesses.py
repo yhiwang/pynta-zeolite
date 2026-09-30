@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-"""Step 6 -- filter the TS guesses step 5 wrote down to distinct ones, and
-table how many each site pair produced.
+"""Step 6 -- filter the TS guesses step 5 wrote down to distinct ones.
 
 Reads every <RUN_DIR>/TS_guesses/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz
 together with its manifest record from the reaction's info.json. Within
@@ -10,15 +9,12 @@ and the roomiest member (best clearance) stands for the cluster. Keepers
 are laid out in the same shape under
 
     <RUN_DIR>/TS_unique/<i>_rxn/info.json          manifest + kept / merged
-    <RUN_DIR>/TS_unique/<i>_rxn/pair_counts.png    site x site kept/collected
     <RUN_DIR>/TS_unique/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz
 
 so the relaxation submitter can be pointed at either tree.
 
-pair_counts.png covers every first-shell oxygen of every Al: rows are the
-oxygen seating X14, columns the oxygen seating X15, so flip0 and flip1 of
-one pair fill mirror cells. X is a pair that was never tried (out of span,
-or excluded by the site rule), 0/n a pair that was tried and gave nothing.
+The kept / merged record in info.json is what analysis/plot_pair_counts.py
+tables per site pair.
 
 settings.TS_KEEP_PER_DIRECTION, when set, caps the clusters kept per pair
 and direction (1 = only the roomiest guess of each direction survives).
@@ -34,7 +30,6 @@ import layout
 import settings
 from ase.io import read
 from pyntaz.filtering import cluster_by_rmsd
-from pyntaz.plotting import plot_pair_counts
 
 run = layout.RunLayout(settings.RUN_DIR)
 
@@ -42,41 +37,7 @@ if not os.path.isdir(run.ts_guesses):
     sys.exit("%s not found -- run step 5 first" % run.ts_guesses)
 
 # --------------------------------------------------------------------------
-# table axes: every first-shell O of every Al, Al by Al, whatever the site
-# rule -- the rule only decides which cells are X
-# --------------------------------------------------------------------------
-
-framework = layout.load_framework(settings.RUN_DIR)
-oxygens = framework.monodentate_sites()
-al_order = {al: k for k, al in enumerate(framework.al_indices)}
-oxygens.sort(key=lambda site: (al_order[site["al_index"]], site["indices"][0]))
-sites = [(site["t_label"], site["label"], site["indices"][0]) for site in oxygens]
-row_of = {site["indices"][0]: k for k, site in enumerate(oxygens)}
-
-table_title = "%s %s" % (framework.code, "-".join(framework.t_labels))
-if len(framework.al_indices) > 1:
-    table_title += ", site rule %s" % framework.site_rule
-
-
-def pair_counts(info):
-    """{(row, col): (kept, collected)} per directed oxygen pair. Every tried
-    pair seeds both directions with (0, 0); each guess then lands on its
-    manifest (X14 oxygen, X15 oxygen)."""
-    counts = {}
-    for record in info["pairs"].values():
-        a, b = record["oxygens"]
-        counts[(row_of[a], row_of[b])] = [0, 0]
-        counts[(row_of[b], row_of[a])] = [0, 0]
-        for guess in record["guesses"].values():
-            first, second = guess["oxygens"]
-            cell = counts[(row_of[first], row_of[second])]
-            cell[1] += 1
-            cell[0] += guess["kept"]
-    return {key: tuple(value) for key, value in counts.items()}
-
-
-# --------------------------------------------------------------------------
-# collect, filter, copy, table -- one reaction at a time
+# collect, filter, copy -- one reaction at a time
 # --------------------------------------------------------------------------
 
 n_collected = n_kept = 0
@@ -143,10 +104,5 @@ for reaction_name, reaction_dir in layout.species_dirs(run.ts_guesses):
     info["keep_per_direction"] = settings.TS_KEEP_PER_DIRECTION
     with open(os.path.join(out_reaction_dir, layout.REACTION_INFO), "w") as handle:
         json.dump(info, handle, indent=2)
-
-    table_path = os.path.join(out_reaction_dir, layout.PAIR_TABLE)
-    plot_pair_counts("%s  %s   (%s)" % (reaction_name, info["reaction"], table_title),
-                     sites, pair_counts(info), table_path)
-    print("  table -> %s" % table_path)
 
 print("\n%d of %d guesses kept in %s" % (n_kept, n_collected, run.ts_unique))

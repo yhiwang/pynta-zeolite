@@ -27,3 +27,7 @@ openmm/ts_guess*.json
 openmm/mace_relax/
 openmm/sella/
 openmm/jobs/
+runs*/
+demo/
+scripts/test.py
+tests/*.xyz

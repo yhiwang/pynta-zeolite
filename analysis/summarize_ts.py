@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-"""Step 9 -- one table and one figure for every Sella run of the run
-directory (see pyntaz/ts_summary.py).
+"""One table and one figure for every Sella run of the run
+directory (see analysis/ts_summary.py).
 
     <RUN_DIR>/TS_sella/ts_summary.csv   one row per guess and start
     <RUN_DIR>/TS_sella/ts_summary.png   A  best outcome per O pair and reaction
@@ -19,7 +19,7 @@ import sys
 import _common  # noqa: F401
 import layout
 import settings
-from pyntaz.ts_summary import LABELS, VERDICTS, collect, plot_summary, verdict_counts, write_csv
+from ts_summary import LABELS, VERDICTS, collect, plot_summary, verdict_counts, write_csv
 
 run = layout.RunLayout(settings.RUN_DIR)
 if not os.path.isdir(run.ts_sella):

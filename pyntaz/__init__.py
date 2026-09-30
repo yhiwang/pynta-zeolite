@@ -4,7 +4,7 @@ The chemistry and the algorithms, and nothing else: every function here
 takes and returns in-memory objects (ase Atoms, RMG Molecules, plain dicts)
 and knows nothing about run directories or file names. Where things live on
 disk, and the settings of a particular run, are the business of the step
-scripts in ``scripts/``.
+scripts in ``scripts/``, and figures and tables are in ``analysis/``.
 
 Module map, in workflow order:
 
@@ -16,12 +16,10 @@ Module map, in workflow order:
     adsorbates   species_guesses: every species on every site       (step 1)
     relax        MACE relaxation of one structure, framework frozen  (step 2)
     filtering    bond-survival test and RMSD deduplication           (step 3)
-    plotting     energy-vs-orientation figures                       (step 4)
     adjlist      AdjacencyStructure: 3D coordinates from an adjacency list
     ts_graph     TSGraph + PairSweep: TS guesses from the reaction graph (step 5)
     ts_harmonic_relax  staged spring pre-relax of one TS guess with MACE (step 7)
     ts_sella     Sella saddle search + frequency check of one TS start  (step 8)
-    ts_summary   table + figure of every Sella run                  (step 9)
 
 Every numeric default lives next to the function that uses it, as a
 keyword argument; the step scripts pass their own values from

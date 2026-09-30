@@ -1,5 +1,5 @@
-"""Step 4 (optional): relaxation energy across the placement sweep, one
-figure per species.
+"""Figures for analysis/: relaxation energy across the placement sweep (one
+figure per species) and the site x site TS guess-count table.
 
 Monodentate species give energy vs spin angle, one column per site;
 bidentate species give a phi/psi heat map, one panel per (site pair, flip).
@@ -17,8 +17,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from .placement import (GAS_STEM, parse_orientation_stem, is_monodentate_stem,
-                        is_bidentate_stem)
+from pyntaz.placement import (GAS_STEM, parse_orientation_stem, is_monodentate_stem,
+                               is_bidentate_stem)
 
 # "BFGS:   12 15:04:11   -2274.123456   0.0345"
 _OPTIMIZER_ROW = re.compile(

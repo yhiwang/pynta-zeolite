@@ -2,7 +2,7 @@
 """Compare two run directories file by file (used to check that a code change
 did not alter the numbers).
 
-    python scripts/compare_runs.py old_run new_run [--tol 1e-6]
+    python analysis/compare_runs.py old_run new_run [--tol 1e-6]
 
 Every *.xyz present in both trees is compared on chemical symbols, cell and
 positions; *.json files are compared as parsed objects. Files present in only

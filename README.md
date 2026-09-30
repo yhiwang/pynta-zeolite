@@ -105,7 +105,6 @@ pynta-zeolite/
 │   ├── adsorbates.py     every species on every site                  (step 1)
 │   ├── relax.py          MACE relaxation, framework frozen             (step 2)
 │   ├── filtering.py      bond-survival test and RMSD clustering        (step 3)
-│   ├── plotting.py       energy across the placement sweep             (step 4)
 │   ├── ts_graph.py       TS guesses from the merged reaction graph     (step 5)
 │   └── geometry.py       neighbor lists, framework/adsorbate split, clashes, RMSD
 ├── scripts/              one script per step, run in order
@@ -113,7 +112,13 @@ pynta-zeolite/
 │   ├── layout.py         the only file that knows the run-directory layout
 │   ├── 00_build_framework.py ... 06_filter_ts_guesses.py
 │   └── helpers: relax_one.py (SLURM worker), place_one_adsorbate.py,
-│                rotate_chain.py, demo_framework.py, compare_runs.py
+│                rotate_chain.py, demo_framework.py
+├── analysis/             plots and tables from a run; read-only, safe to rerun
+│   ├── plot_relax_sweep.py   energy vs orientation after step 2
+│   ├── plot_pair_counts.py   site x site TS guess counts after step 6
+│   ├── summarize_ts.py       ts_summary.csv + .png from TS_sella/
+│   ├── compare_runs.py       diff two run dirs after a code change
+│   └── plotting.py, ts_summary.py   figure and table code the scripts above use
 ├── openmm/               experimental TS refinement, see below
 ├── tests/                standalone checks, print PASS/FAIL
 └── archive/              the old endpoint-pair TS route, kept for reference
@@ -143,9 +148,10 @@ python scripts/00_build_framework.py     # bare framework + sites
 python scripts/01_build_adsorbates.py    # every species on every site
 python scripts/02_submit_relax.py        # one MACE job per config (SUBMIT=False: dry run)
 python scripts/03_filter_relax.py        # after the jobs finish: survivors, unique minima
-python scripts/04_plot_relax_sweep.py    # optional: energy vs orientation
+python analysis/plot_relax_sweep.py      # optional: energy vs orientation
 python scripts/05_build_ts_guesses.py    # TS guesses from reaction.yaml, needs only step 0
-python scripts/06_filter_ts_guesses.py   # distinct TS guesses + site x site count plot
+python scripts/06_filter_ts_guesses.py   # distinct TS guesses
+python analysis/plot_pair_counts.py      # optional: site x site guess-count table
 ```
 
 Steps 5–6 don't need steps 1–4: TS guesses are built from the reaction
@@ -240,7 +246,7 @@ To check that a code change didn't alter any numbers, run the old and new
 code into two run directories and compare them file by file:
 
 ```bash
-python scripts/compare_runs.py runs/old runs/new
+python analysis/compare_runs.py runs/old runs/new
 ```
 
 ---

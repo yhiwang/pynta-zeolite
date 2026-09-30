@@ -8,17 +8,18 @@ same way and changing the layout means changing this file::
     <run_dir>/Adsorbates_relax/<species>/<site>/<stem>/relax.*   step 2
     <run_dir>/Adsorbates_relax_filtered/<species>/<site>/<stem>.xyz   step 3
     <run_dir>/Adsorbates_relax_unique/<species>/<site>/<stem>.xyz
-    <run_dir>/<species>_sweep.png                                step 4
+    <run_dir>/<species>_sweep.png                                analysis/plot_relax_sweep.py
     <run_dir>/TS_guesses/<i>_rxn/info.json                       step 5
     <run_dir>/TS_guesses/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz
     <run_dir>/TS_guesses/<i>_rxn/pair_<k>/sweep.traj
     <run_dir>/TS_unique/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz    step 6
+    <run_dir>/TS_unique/<i>_rxn/pair_counts.png                  analysis/plot_pair_counts.py
     <run_dir>/TS_harmonic/<i>_rxn/info.json                      step 7
     <run_dir>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz, ts_bonds.json
     <run_dir>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/ts_harmonic.*
     <run_dir>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/start.xyz, ts_bonds.json   step 8
     <run_dir>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/ts_sella.xyz, sella.*, vib*, result.json
-    <run_dir>/TS_sella/ts_summary.csv, ts_summary.png             step 9
+    <run_dir>/TS_sella/ts_summary.csv, ts_summary.png             analysis/summarize_ts.py
     
 ``<site>`` is the zero-padded index into the framework's ``mono_sites`` (or
 ``bi_sites``), ``<stem>`` the orientation name from ``pyntaz.placement``
@@ -52,7 +53,7 @@ JOB_ID = "job.id"                     # SLURM id, written by steps 7-8 after sba
 SPECIES_INFO = "info.json"            # adsorbates.species_info() record
 REACTION_INFO = "info.json"           # TS_guesses/<i>_rxn/: reaction + pair manifest
 SWEEP_TRAJECTORY = "sweep.traj"       # every roll of every survivor, for ase gui
-PAIR_TABLE = "pair_counts.png"        # TS_unique/<i>_rxn/: site x site guess counts
+PAIR_TABLE = "pair_counts.png"        # TS_unique/<i>_rxn/: plot_pair_counts.py table
 TS_BONDS_JSON = "ts_bonds.json"       # TS_harmonic/.../<stem>/: reacting bonds as atom indices
 TS_HARMONIC_STRUCTURE = "ts_harmonic.xyz"   # written by ts_harmonic_one.py, MACE energy + forces
 TS_HARMONIC_TRAJECTORY = "ts_harmonic.traj"
@@ -63,8 +64,8 @@ TS_SELLA_TRAJECTORY = "sella.traj"
 TS_SELLA_LOG = "sella.log"
 TS_SELLA_VIB = "vib"                  # vibration cache dir; the first mode goes to vib.0.traj
 TS_SELLA_RESULT = "result.json"       # verdict, energies, frequencies; written last
-TS_SUMMARY_CSV = "ts_summary.csv"     # TS_sella/: step 9 table, one row per guess and start
-TS_SUMMARY_PNG = "ts_summary.png"     # TS_sella/: step 9 figure
+TS_SUMMARY_CSV = "ts_summary.csv"     # TS_sella/: summarize_ts.py table, one row per guess and start
+TS_SUMMARY_PNG = "ts_summary.png"     # TS_sella/: summarize_ts.py figure
 GAS_SITE = "0"                        # site folder of a gas-phase species
 
 

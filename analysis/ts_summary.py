@@ -1,5 +1,5 @@
-"""Step 9 of the workflow: one table and one figure for every Sella run of
-a run directory.
+"""One table and one figure for every Sella run of a run directory
+(used by analysis/summarize_ts.py).
 
     collect        walk TS_sella/ and return one row per (guess, start)
     write_csv      the rows as a CSV, fixed column order
@@ -32,7 +32,7 @@ import numpy as np
 from ase.data import covalent_radii
 from ase.io import read
 
-from .geometry import positional_rmsd
+from pyntaz.geometry import positional_rmsd
 
 VERDICTS = ("ts", "wrong_mode", "higher_order", "minimum", "not_converged", "failed", "pending")
 LABELS = {"ts": "TS", "wrong_mode": "wrong mode", "higher_order": "higher order",
@@ -49,7 +49,7 @@ COLUMNS = ["reaction", "reaction_name", "reaction_family", "pair", "sites", "O_a
            "n_imag", "imag1_cm", "mode_max_stretch", "break_norm_start", "break_norm_end",
            "form_norm_start", "form_norm_end", "rmsd_to_other_start", "bonds"]
 
-# file names inside TS_sella/; the step script passes scripts/layout.py's
+# file names inside TS_sella/; summarize_ts.py passes scripts/layout.py's
 FILES = {"info": "info.json", "bonds": "ts_bonds.json", "start": "start.xyz",
          "end": "ts_sella.xyz", "result": "result.json", "err": "job.err"}
 
@@ -345,7 +345,7 @@ def _panel_energies(ax, rows, reactions, starts):
 
 
 def plot_summary(rows, out_path, title):
-    """The step 9 figure (module docstring) for ``rows`` from :func:`collect`.
+    """The summary figure (module docstring) for ``rows`` from :func:`collect`.
     ``title`` is the subtitle's run name. Sized to the number of reactions
     and O pairs."""
     import matplotlib
