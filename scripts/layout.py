@@ -20,7 +20,9 @@ same way and changing the layout means changing this file::
     <run_dir>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/start.xyz, ts_bonds.json   step 8
     <run_dir>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/ts_sella.xyz, sella.*, vib*, result.json
     <run_dir>/TS_sella/ts_summary.csv, ts_summary.png             analysis/summarize_ts.py
-    
+    <run_dir>/DFT_sp/<i>_rxn/pair_<k>/<stem>/<start>/f<frame>/config.extxyz, source.json   dft/01
+    <run_dir>/DFT_sp/manifest.csv, all_configs.extxyz              dft/01
+
 ``<site>`` is the zero-padded index into the framework's ``mono_sites`` (or
 ``bi_sites``), ``<stem>`` the orientation name from ``pyntaz.placement``
 (``degrees_045``, ``flip0_phi105_psi240``) or ``pyntaz.ts_graph``; a
@@ -66,6 +68,10 @@ TS_SELLA_VIB = "vib"                  # vibration cache dir; the first mode goes
 TS_SELLA_RESULT = "result.json"       # verdict, energies, frequencies; written last
 TS_SUMMARY_CSV = "ts_summary.csv"     # TS_sella/: summarize_ts.py table, one row per guess and start
 TS_SUMMARY_PNG = "ts_summary.png"     # TS_sella/: summarize_ts.py figure
+DFT_CONFIG = "config.extxyz"          # DFT_sp/.../f<frame>/: one structure, MACE labels kept as mace_*
+DFT_SOURCE = "source.json"            # DFT_sp/.../f<frame>/: where the frame came from
+DFT_MANIFEST = "manifest.csv"         # DFT_sp/: one row per collected config
+DFT_ALL_CONFIGS = "all_configs.extxyz"   # DFT_sp/: every collected config, for ase gui
 GAS_SITE = "0"                        # site folder of a gas-phase species
 
 
@@ -82,6 +88,7 @@ class RunLayout:
         self.ts_unique = os.path.join(run_dir, "TS_unique")
         self.ts_harmonic = os.path.join(run_dir, "TS_harmonic")
         self.ts_sella = os.path.join(run_dir, "TS_sella")
+        self.dft_sp = os.path.join(run_dir, "DFT_sp")
         self.plots = run_dir
 
     def __repr__(self):
