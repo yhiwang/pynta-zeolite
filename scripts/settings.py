@@ -57,8 +57,11 @@ PYTHON = os.environ.get(
     "PYNTAZ_PYTHON", os.path.expanduser("~/.conda/envs/pyntaz-slim/bin/python"))
 # a model *file*: a bare model name makes MACE try to download it, which
 # fails on a compute node without internet
+# MACE_MODEL = os.environ.get(
+#     "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa-0-medium.model"))
+
 MACE_MODEL = os.environ.get(
-    "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa-0-medium.model"))
+    "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa0-ft-MOR_T4-e1f10.model"))
 
 SLURM_ACCOUNT = os.environ.get("PYNTAZ_SLURM_ACCOUNT", "ark245grp")
 SLURM_PARTITION = os.environ.get("PYNTAZ_SLURM_PARTITION", "high")
