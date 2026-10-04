@@ -47,7 +47,7 @@ GAS_VACUUM = 10.0               # A of vacuum around a gas-phase molecule
 # step 2: relaxation and SLURM
 # --------------------------------------------------------------------------
 
-SUBMIT = True                   # False: write job dirs + job.sh only (dry run)
+SUBMIT = False                   # False: write job dirs + job.sh only (dry run)
 SKIP = ()                       # species names to leave out
 RELAX_FMAX = 0.05               # eV/A
 RELAX_MAX_STEPS = 100
@@ -107,8 +107,19 @@ TS_KEEP_PER_DIRECTION = None    # cap on clusters kept per pair and direction, o
 # --------------------------------------------------------------------------
 
 TS_HARMONIC_REACTIONS = None    # None: every reaction in TS_unique; or e.g. [0, 3]
-TS_HARMONIC_MULT = {"form": 1.2, "break": 1.2}   # spring target = (r_i + r_j) x this,
-                                # r = covalent radius; "order" bonds get no spring
+TS_HARMONIC_STATES = ("initial", "final")   # one job per guess and state; drop any
+TS_HARMONIC_MODES = {           # per state: which bonds get springs, spring target
+                                # (r_i + r_j) x mult (r = covalent radius), and whether
+                                # a spring-free relax follows; "order" bonds never get one
+    "ts":      {"springs": ("form", "break"), "mult": {"form": 1.2, "break": 1.2},
+                "free_relax": False},
+    "initial": {"springs": ("break",), "mult": {"form": 1.0, "break": 1.0},
+                "free_relax": True},
+    "final":   {"springs": ("form",), "mult": {"form": 1.0, "break": 1.0},
+                "free_relax": True},
+}
+TS_HARMONIC_FREE_STEPS = 300    # BFGS cap of the spring-free relax (initial / final)
+TS_HARMONIC_BOND_CUTOFF = 1.25  # bonded if r < (r_i + r_j) x this, for the endpoint check
 TS_HARMONIC_K = 30.0            # eV/A^2, spring constant
 TS_HARMONIC_FRAMEWORK_RADIUS = 4.0   # A, framework atoms this close to the adsorbate
                                 # relax in the framework stage; use the same free

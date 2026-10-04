@@ -1,14 +1,25 @@
 #!/usr/bin/env python
-"""Step 7 -- mirror TS_unique/ into TS_harmonic/ and submit one harmonic
-pre-relax job per TS guess (see pyntaz/ts_harmonic_relax.py).
+"""Step 7 -- mirror TS_unique/ into TS_harmonic/ and submit harmonic relax
+jobs (see pyntaz/harmonic_relax.py): one job per TS guess and state.
+
+States (settings.TS_HARMONIC_STATES, defined in settings.TS_HARMONIC_MODES)
+all start from the same raw step 5 guess:
+
+    ts        springs on every forming and breaking bond (stretched)
+    initial   springs on the breaking bonds only, then a spring-free relax
+    final     springs on the forming bonds only, then a spring-free relax
 
 For every reaction in settings.TS_HARMONIC_REACTIONS (None: all of
 TS_unique), and every guess step 6 kept:
 
-    <RUN_DIR>/TS_harmonic/<i>_rxn/info.json                   copied from TS_unique
+    <RUN_DIR>/TS_harmonic/<i>_rxn/info.json                         copied from TS_unique
     <RUN_DIR>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz   copied
     <RUN_DIR>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/ts_bonds.json     reacting bonds
-    <RUN_DIR>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/job.sh
+    <RUN_DIR>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/job.sh            ts job
+    <RUN_DIR>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/<state>/job.sh    initial / final jobs
+
+The ts job runs in the guess folder itself, where step 8 looks for
+ts_harmonic.xyz; the other states each get their own subfolder.
 
 ts_bonds.json holds the forming and breaking bonds as atom indices of that
 guess, worked out here from the reaction graph so the job needs no RMG.
@@ -16,10 +27,10 @@ Every guess is checked against the graph first (atom count, and the element
 at every mapped index); a guess that fails is reported and not submitted.
 
 settings.SUBMIT = False writes everything but job submission (dry run).
-Guesses that already have ts_harmonic.xyz are skipped, and so are guesses
-submitted before whose job has not finished (job.id is in their folder;
-delete the folder to resubmit a failed one). Each job runs
-scripts/ts_harmonic_one.py from this checkout, so keep it where it is until
+A state that already has its result is skipped, and so is one submitted
+before whose job has not finished (job.id is in its folder; delete job.id,
+or the state's subfolder, to resubmit a failed one). Each job runs
+scripts/harmonic_one.py from this checkout, so keep it where it is until
 the jobs have started.
 """
 
@@ -35,9 +46,9 @@ import settings
 from ase.io import read
 from pyntaz.reactions import molecule_from_adjlist
 from pyntaz.ts_graph import TSGraph
-from pyntaz.ts_harmonic_relax import check_atom_order, guess_bond_indices
+from pyntaz.harmonic_relax import check_atom_order, guess_bond_indices
 
-WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ts_harmonic_one.py")
+WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "harmonic_one.py")
 
 JOB_TEMPLATE = """#!/bin/bash
 #SBATCH --job-name=%(name)s
@@ -56,13 +67,13 @@ export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export PYTHONPATH=%(repo)s:$PYTHONPATH
 
 # the env python directly: `conda activate` fails silently in batch jobs
-%(python)s %(worker)s %(xyz)s
+%(python)s %(worker)s %(xyz)s %(state)s
 """
 
 
-def job_script(name, xyz_name):
-    """Text of job.sh for one guess; ``xyz_name`` is relative to the job
-    directory."""
+def job_script(name, xyz_name, state):
+    """Text of job.sh for one guess and state; ``xyz_name`` is relative to
+    the job directory."""
     return JOB_TEMPLATE % {"name": name,
                            "account": settings.SLURM_ACCOUNT,
                            "partition": settings.SLURM_PARTITION,
@@ -70,7 +81,7 @@ def job_script(name, xyz_name):
                            "memory": settings.SLURM_MEMORY,
                            "time": settings.TS_HARMONIC_SLURM_TIME,
                            "repo": _common.REPO, "python": settings.PYTHON,
-                           "worker": WORKER, "xyz": xyz_name}
+                           "worker": WORKER, "xyz": xyz_name, "state": state}
 
 
 def missing_machine_paths():
@@ -92,8 +103,12 @@ if not os.path.isdir(run.ts_unique):
 
 n_framework = len(read(os.path.join(settings.RUN_DIR, layout.BARE_XYZ)))
 wanted = settings.TS_HARMONIC_REACTIONS
-print("%s: %d framework atoms, reactions %s"
-      % (settings.RUN_DIR, n_framework, "all" if wanted is None else list(wanted)))
+states = list(settings.TS_HARMONIC_STATES)
+unknown = [state for state in states if state not in settings.TS_HARMONIC_MODES]
+if unknown:
+    sys.exit("TS_HARMONIC_STATES has %s, not in TS_HARMONIC_MODES" % unknown)
+print("%s: %d framework atoms, reactions %s, states %s"
+      % (settings.RUN_DIR, n_framework, "all" if wanted is None else list(wanted), states))
 
 n_jobs = n_done = n_queued = n_bad = 0
 for reaction_name, reaction_dir in layout.species_dirs(run.ts_unique):
@@ -119,17 +134,25 @@ for reaction_name, reaction_dir in layout.species_dirs(run.ts_unique):
         guess = info["pairs"][pair]["guesses"][stem]
         label = os.path.join(reaction_name, relative)
 
-        job_dir = os.path.join(target_dir, relative)
-        os.makedirs(job_dir, exist_ok=True)
-        shutil.copy2(xyz, os.path.join(job_dir, os.path.basename(xyz)))
-        if os.path.exists(os.path.join(job_dir, layout.TS_HARMONIC_STRUCTURE)):
-            print("  already done   %s" % relative)
-            counts["done"] += 1
-            continue
-        if os.path.exists(os.path.join(job_dir, layout.JOB_ID)):
-            with open(os.path.join(job_dir, layout.JOB_ID)) as handle:
-                print("  in the queue   %s  (job %s, no result yet)" % (relative, handle.read().strip()))
-            counts["queued"] += 1
+        guess_dir = os.path.join(target_dir, relative)
+        os.makedirs(guess_dir, exist_ok=True)
+        xyz_name = os.path.basename(xyz)
+        shutil.copy2(xyz, os.path.join(guess_dir, xyz_name))
+
+        todo = []
+        for state in states:
+            job_dir = layout.harmonic_job_dir(guess_dir, state)
+            tag = "%-7s %s" % (state, relative)
+            if os.path.exists(os.path.join(job_dir, layout.harmonic_files(state)[0])):
+                print("  already done   %s" % tag)
+                counts["done"] += 1
+            elif os.path.exists(os.path.join(job_dir, layout.JOB_ID)):
+                with open(os.path.join(job_dir, layout.JOB_ID)) as handle:
+                    print("  in the queue   %s  (job %s, no result yet)" % (tag, handle.read().strip()))
+                counts["queued"] += 1
+            else:
+                todo.append(state)
+        if not todo:
             continue
 
         atoms = read(xyz)
@@ -137,31 +160,36 @@ for reaction_name, reaction_dir in layout.species_dirs(run.ts_unique):
             check_atom_order(atoms, ts, guess["oxygens"], n_framework)
         except ValueError as error:
             print("  NOT SUBMITTED  %s: %s" % (relative, error))
-            counts["bad"] += 1
+            counts["bad"] += len(todo)
             continue
         bonds = guess_bond_indices(ts, guess["oxygens"], n_framework)
         for bond in bonds:
             bond["start"] = round(float(atoms.get_distance(*bond["indices"], mic=True)), 3)
-        with open(os.path.join(job_dir, layout.TS_BONDS_JSON), "w") as handle:
+        with open(os.path.join(guess_dir, layout.TS_BONDS_JSON), "w") as handle:
             json.dump({"guess": label, "reaction": info["reaction"], "index": index,
                        "n_framework": n_framework, "oxygens": guess["oxygens"],
                        "flip": guess["flip"], "bonds": bonds}, handle, indent=2)
 
-        with open(os.path.join(job_dir, layout.JOB_SCRIPT), "w") as handle:
-            handle.write(job_script("tsh%d_%s" % (index, pair[-2:]), os.path.basename(xyz)))
-        if settings.SUBMIT:
-            result = subprocess.run(["sbatch", "--chdir=" + job_dir, layout.JOB_SCRIPT],
-                                    capture_output=True, text=True)
-            print("  %s -> %s" % (relative, result.stdout.strip() or result.stderr.strip()))
-            if result.returncode != 0:
-                sys.exit("sbatch failed, stopping")
-            with open(os.path.join(job_dir, layout.JOB_ID), "w") as handle:
-                handle.write(result.stdout.strip().split()[-1] + "\n")
-        else:
-            print("  would submit   %s" % relative)
-        counts["submit"] += 1
+        for state in todo:
+            job_dir = layout.harmonic_job_dir(guess_dir, state)
+            os.makedirs(job_dir, exist_ok=True)
+            tag = "%-7s %s" % (state, relative)
+            xyz_arg = os.path.relpath(os.path.join(guess_dir, xyz_name), job_dir)
+            with open(os.path.join(job_dir, layout.JOB_SCRIPT), "w") as handle:
+                handle.write(job_script("tsh%d_%s%s" % (index, pair[-2:], state[0]), xyz_arg, state))
+            if settings.SUBMIT:
+                result = subprocess.run(["sbatch", "--chdir=" + job_dir, layout.JOB_SCRIPT],
+                                        capture_output=True, text=True)
+                print("  %s -> %s" % (tag, result.stdout.strip() or result.stderr.strip()))
+                if result.returncode != 0:
+                    sys.exit("sbatch failed, stopping")
+                with open(os.path.join(job_dir, layout.JOB_ID), "w") as handle:
+                    handle.write(result.stdout.strip().split()[-1] + "\n")
+            else:
+                print("  would submit   %s" % tag)
+            counts["submit"] += 1
 
-    print("  %d %s, %d already done, %d in the queue, %d not submitted"
+    print("  %d jobs %s, %d already done, %d in the queue, %d not submitted"
           % (counts["submit"], "submitted" if settings.SUBMIT else "to submit",
              counts["done"], counts["queued"], counts["bad"]))
     n_jobs += counts["submit"]
@@ -169,6 +197,6 @@ for reaction_name, reaction_dir in layout.species_dirs(run.ts_unique):
     n_queued += counts["queued"]
     n_bad += counts["bad"]
 
-print("\n%d guesses %s, %d already done, %d in the queue, %d not submitted  (%s)"
+print("\n%d jobs %s, %d already done, %d in the queue, %d not submitted  (%s)"
       % (n_jobs, "submitted" if settings.SUBMIT else "would be submitted",
          n_done, n_queued, n_bad, run.ts_harmonic))

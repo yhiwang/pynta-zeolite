@@ -17,6 +17,7 @@ same way and changing the layout means changing this file::
     <run_dir>/TS_harmonic/<i>_rxn/info.json                      step 7
     <run_dir>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz, ts_bonds.json
     <run_dir>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/ts_harmonic.*
+    <run_dir>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/<state>/<state>.*, endpoint.json   (initial, final)
     <run_dir>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/start.xyz, ts_bonds.json   step 8
     <run_dir>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/ts_sella.xyz, sella.*, vib*, result.json
     <run_dir>/TS_sella/ts_summary.csv, ts_summary.png             analysis/summarize_ts.py
@@ -60,6 +61,7 @@ TS_BONDS_JSON = "ts_bonds.json"       # TS_harmonic/.../<stem>/: reacting bonds 
 TS_HARMONIC_STRUCTURE = "ts_harmonic.xyz"   # written by ts_harmonic_one.py, MACE energy + forces
 TS_HARMONIC_TRAJECTORY = "ts_harmonic.traj"
 TS_HARMONIC_LOG = "ts_harmonic.log"
+ENDPOINT_RESULT = "endpoint.json"     # TS_harmonic/.../<stem>/<state>/: bond check of initial / final
 TS_START = "start.xyz"                # TS_sella/.../<start>/: the structure Sella starts from
 TS_SELLA_STRUCTURE = "ts_sella.xyz"   # written by ts_sella_one.py, MACE energy + forces
 TS_SELLA_TRAJECTORY = "sella.traj"
@@ -269,3 +271,16 @@ def read_with_energy(path):
         return atoms, atoms.get_potential_energy()
     except (RuntimeError, AttributeError):
         return atoms, None
+
+
+def harmonic_job_dir(config_dir, state):
+    """Folder of one step 7 job: the guess folder itself for "ts" (where
+    step 8 looks), a ``<state>/`` subfolder for any other state."""
+    return config_dir if state == "ts" else os.path.join(config_dir, state)
+
+
+def harmonic_files(state):
+    """(structure, trajectory, log) file names of one step 7 state."""
+    if state == "ts":
+        return TS_HARMONIC_STRUCTURE, TS_HARMONIC_TRAJECTORY, TS_HARMONIC_LOG
+    return state + ".xyz", state + ".traj", state + ".log"

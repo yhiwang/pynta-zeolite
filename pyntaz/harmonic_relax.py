@@ -19,6 +19,11 @@ reached; a last spectator stage then relaxes the spectators around the
 final reacting geometry. The result is a spring-biased starting point for a
 saddle search, not a transition state.
 
+:func:`state_relax` runs the same staged relax with only some of the springs
+on, so one raw guess also gives the initial state (springs on the breaking
+bonds at bonded length, forming bonds free) and the final state (the
+reverse), each finished by a spring-free relax and a bond check.
+
 Only ASE, MACE and numpy are needed, so this runs on a compute node without
 maze or RMG. :func:`guess_bond_indices` takes a :class:`pyntaz.ts_graph.TSGraph`
 but never imports RMG itself; call it where the graph was built.
@@ -128,6 +133,12 @@ def spring_targets(atoms, bonds, mult=None):
     return [(i, j, float((radius[i] + radius[j]) * mult[change])) for i, j, change in bonds]
 
 
+def load_mace(model_path, device="cpu"):
+    """MACE calculator from a model *file*, float64."""
+    from mace.calculators import mace_mp   # heavy import, only when relaxing
+    return mace_mp(model=model_path, default_dtype="float64", device=device)
+
+
 # --------------------------------------------------------------------------
 # the staged relax
 # --------------------------------------------------------------------------
@@ -135,7 +146,7 @@ def spring_targets(atoms, bonds, mult=None):
 def harmonic_relax(atoms, bonds, n_framework, model_path, mult=None, k=K_RESTRAINT,
                    framework_radius=FRAMEWORK_RADIUS, steps=None, max_cycles=MAX_CYCLES,
                    e_tol=E_TOL, fmax=FMAX, device="cpu", logfile=None,
-                   trajectory=None, log=None):
+                   trajectory=None, log=None, calc=None):
     """Relax a TS guess in place in alternating stages (module docstring).
 
     ``bonds`` are the forming / breaking bonds as (i, j, change) in
@@ -145,7 +156,8 @@ def harmonic_relax(atoms, bonds, n_framework, model_path, mult=None, k=K_RESTRAI
     when given (``log=print`` for a job's stdout).
 
     ``model_path`` must be a file: a bare model name makes MACE try to
-    download it, which fails on a compute node without internet.
+    download it, which fails on a compute node without internet. ``calc``,
+    an already loaded MACE calculator, is used instead when given.
 
     Returns a dict: ``energy`` and ``forces`` (MACE only, no springs, no
     constraints), ``cycles`` [(framework, spectator, reacting steps,
@@ -155,8 +167,6 @@ def harmonic_relax(atoms, bonds, n_framework, model_path, mult=None, k=K_RESTRAI
     ``lengths`` [(i, j, change, r, r0)]. ``atoms`` is left without a
     calculator or constraint; attach the result yourself before writing.
     """
-    from mace.calculators import mace_mp   # heavy import, only when relaxing
-
     log = log or (lambda line: None)
     steps = dict(STEPS, **(steps or {}))
     atoms.pbc = True
@@ -170,7 +180,7 @@ def harmonic_relax(atoms, bonds, n_framework, model_path, mult=None, k=K_RESTRAI
               "spectators": [i for i in adsorbate if i not in reacting],
               "reacting": [i for i in reacting if i >= n_framework]}
 
-    mace = mace_mp(model=model_path, default_dtype="float64", device=device)
+    mace = calc if calc is not None else load_mace(model_path, device)
     springs = BondRestraints(targets, k)
     # one handle for all stages: a BFGS given a path would reopen it per stage
     # and a trajectory path would be overwritten each time
@@ -221,3 +231,128 @@ def harmonic_relax(atoms, bonds, n_framework, model_path, mult=None, k=K_RESTRAI
             "fmax_framework": float(np.linalg.norm(forces[local], axis=1).max()) if local else 0.0,
             "lengths": [(i, j, change, float(atoms.get_distance(i, j, mic=True)), r0)
                         for (i, j, change), (_, _, r0) in zip(bonds, targets)]}
+
+
+# --------------------------------------------------------------------------
+# one state: ts, initial or final
+# --------------------------------------------------------------------------
+
+def bond_cutoff(atoms, i, j, cutoff):
+    """(r_i + r_j) x ``cutoff``, r = ASE covalent radius."""
+    z = atoms.get_atomic_numbers()
+    return cutoff * (covalent_radii[z[i]] + covalent_radii[z[j]])
+
+
+def adsorbate_bonds(atoms, n_framework, cutoff, skip=()):
+    """{(i, j)} with i < j of every bonded pair that holds at least one
+    adsorbate atom (bonded: r < (r_i + r_j) x ``cutoff``), minus ``skip``."""
+    skip = {tuple(sorted(pair)) for pair in skip}
+    found = set()
+    for i in range(n_framework, len(atoms)):
+        others = [j for j in range(len(atoms)) if j != i]
+        distances = atoms.get_distances(i, others, mic=True)
+        for j, r in zip(others, distances):
+            pair = (min(i, j), max(i, j))
+            if pair not in skip and r < bond_cutoff(atoms, i, j, cutoff):
+                found.add(pair)
+    return found
+
+
+def state_relax(atoms, bonds, n_framework, model_path, springs, mult, free_relax,
+                k=K_RESTRAINT, framework_radius=FRAMEWORK_RADIUS, steps=None,
+                max_cycles=MAX_CYCLES, e_tol=E_TOL, fmax=FMAX, free_steps=300,
+                cutoff=1.25, device="cpu", logfile=None, trajectory=None, log=None):
+    """Relax a raw TS guess toward one state, in place.
+
+    ``bonds`` are all forming / breaking bonds as (i, j, change). Only those
+    whose change is in ``springs`` get a spring, at (r_i + r_j) x
+    ``mult[change]``, through :func:`harmonic_relax`:
+
+        ts        springs ("form", "break"), stretched mult, no free relax
+        initial   springs ("break",), mult 1.0, free relax
+        final     springs ("form",),  mult 1.0, free relax
+
+    With ``free_relax`` a spring-free MACE relax follows (adsorbate plus the
+    framework within ``framework_radius`` free, at most ``free_steps``
+    BFGS steps), so the result is a minimum rather than a spring-held
+    structure. Every stage goes into the one ``logfile`` / ``trajectory``.
+
+    Returns a dict: ``energy`` / ``forces`` (MACE only), ``harmonic`` (the
+    :func:`harmonic_relax` dict, or None when no bond got a spring),
+    ``free_steps`` / ``free_converged`` (None without a free relax),
+    ``bonds`` [(i, j, change, r, bonded, expected)] for every forming /
+    breaking bond, ``other`` [(i, j, "formed" | "broken")] for any other
+    adsorbate bond that changed against the start, and ``verdict``. With a
+    free relax a bond with a spring is expected bonded and one without is
+    expected broken; ``verdict`` is "ok", "wrong_bonds" (a reacting bond
+    ended on the wrong side) or "other_bonds" (only some other bond
+    changed). Without a free relax nothing is expected and ``verdict`` is
+    None.
+    """
+    log = log or (lambda line: None)
+    atoms.pbc = True
+    held = [bond for bond in bonds if bond[2] in springs]
+    changing = [(i, j) for i, j, _ in bonds]
+    before = adsorbate_bonds(atoms, n_framework, cutoff, skip=changing)
+
+    mace = load_mace(model_path, device)
+    own_log = isinstance(logfile, str)
+    own_traj = isinstance(trajectory, str)
+    logfile = open(logfile, "w") if own_log else logfile
+    trajectory = Trajectory(trajectory, "w") if own_traj else trajectory
+
+    harmonic = None
+    if held:
+        log("  springs on %s, %d bond%s" % ("+".join(springs), len(held), "" if len(held) == 1 else "s"))
+        harmonic = harmonic_relax(atoms, held, n_framework, model_path, mult=mult, k=k,
+                                  framework_radius=framework_radius, steps=steps,
+                                  max_cycles=max_cycles, e_tol=e_tol, fmax=fmax,
+                                  logfile=logfile, trajectory=trajectory, log=log, calc=mace)
+    else:
+        log("  no bond of type %s, springs skipped" % "+".join(springs))
+
+    free_steps_done = free_converged = None
+    if free_relax:
+        adsorbate = np.arange(n_framework, len(atoms))
+        free = set(adsorbate.tolist())
+        free |= {f for f in range(n_framework)
+                 if atoms.get_distances(f, adsorbate, mic=True).min() < framework_radius}
+        atoms.set_constraint(FixAtoms(indices=[a for a in range(len(atoms)) if a not in free]))
+        atoms.calc = mace
+        optimizer = BFGS(atoms, logfile=logfile, trajectory=trajectory)
+        optimizer.run(fmax=fmax, steps=free_steps)
+        free_steps_done = optimizer.get_number_of_steps()
+        free_converged = bool(np.linalg.norm(atoms.get_forces(), axis=1).max() < fmax)
+        log("  free relax  %3d steps, converged %s   E = %.4f eV"
+            % (free_steps_done, free_converged, atoms.get_potential_energy()))
+
+    if own_log:
+        logfile.close()
+    if own_traj:
+        trajectory.close()
+
+    atoms.set_constraint()
+    atoms.calc = mace
+    energy = atoms.get_potential_energy()
+    forces = atoms.get_forces()
+    atoms.calc = None
+
+    report = []
+    for i, j, change in bonds:
+        r = float(atoms.get_distance(i, j, mic=True))
+        expected = (change in springs) if free_relax else None
+        report.append((i, j, change, r, bool(r < bond_cutoff(atoms, i, j, cutoff)), expected))
+    after = adsorbate_bonds(atoms, n_framework, cutoff, skip=changing)
+    other = ([(i, j, "formed") for i, j in sorted(after - before)]
+             + [(i, j, "broken") for i, j in sorted(before - after)])
+    verdict = None
+    if free_relax:
+        if any(bonded != expected for _, _, _, _, bonded, expected in report):
+            verdict = "wrong_bonds"
+        elif other:
+            verdict = "other_bonds"
+        else:
+            verdict = "ok"
+    return {"energy": energy, "forces": forces, "harmonic": harmonic,
+            "free_steps": free_steps_done, "free_converged": free_converged,
+            "bonds": report, "other": other, "verdict": verdict}
