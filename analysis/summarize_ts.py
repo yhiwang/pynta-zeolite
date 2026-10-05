@@ -8,6 +8,9 @@ directory (see analysis/ts_summary.py).
                                         C  where each search ended (bond map)
                                         D  TS energies within each reaction
 
+    python summarize_ts.py             # green: TS found, red: no TS
+    python summarize_ts.py --reasons   # colored by verdict (why no TS)
+
 Runs on the login node in seconds and submits nothing; run it again whenever
 more step 8 jobs have finished. Starts without result.json yet show as
 "no result yet" ("job failed" when their job.err has a traceback).
@@ -35,7 +38,7 @@ if not rows:
 csv_path = os.path.join(run.ts_sella, layout.TS_SUMMARY_CSV)
 png_path = os.path.join(run.ts_sella, layout.TS_SUMMARY_PNG)
 write_csv(rows, csv_path)
-plot_summary(rows, png_path, os.path.relpath(settings.RUN_DIR))
+plot_summary(rows, png_path, os.path.relpath(settings.RUN_DIR), reasons="--reasons" in sys.argv[1:])
 
 counts = verdict_counts(rows)
 present = [v for v in VERDICTS if any(row["verdict"] == v for row in rows)]

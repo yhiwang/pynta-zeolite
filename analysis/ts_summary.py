@@ -18,8 +18,13 @@ the reaction, framework or site rule. A start whose job has not written
 result.json yet is a row with verdict "pending" ("failed" when its job.err
 holds a Python traceback).
 
+Colors: by default two, green for a TS and red for anything else (light
+grey while a job has no result yet). ``reasons=True`` (summarize_ts.py
+--reasons) colors by verdict instead, so a red cell shows why. The CSV
+always holds the full verdict.
+
 Bond lengths are normalised by the sum of the ASE covalent radii,
-r / (r_i + r_j): 1 is bonded, ~1.35 the step 7 spring target, >2 apart.
+r / (r_i + r_j): 1 is bonded, ~1.2 the step 7 spring target, >2 apart.
 """
 
 import csv
@@ -42,6 +47,11 @@ COLORS = {"ts": "#1b9e77", "wrong_mode": "#e6ab02", "higher_order": "#d95f02",
           "minimum": "#7570b3", "not_converged": "#bdbdbd", "failed": "#636363",
           "pending": "#e3e3e3"}
 RANK = {verdict: rank for rank, verdict in enumerate(VERDICTS)}   # lower is better
+
+# the default two colors; reasons=True uses COLORS instead
+GREEN, RED, GREY = "#1b9e77", "#d7301f", "#e3e3e3"
+SIMPLE = {"ts": ("TS found", GREEN), "pending": ("no result yet", GREY)}
+SIMPLE_OTHER = ("no TS", RED)
 START_ORDER = ("harmonic", "raw")
 
 COLUMNS = ["reaction", "reaction_name", "reaction_family", "pair", "sites", "O_a", "O_b",
@@ -202,13 +212,31 @@ def verdict_counts(rows):
 # the figure
 # --------------------------------------------------------------------------
 
+def paint(verdict, reasons):
+    """(label, color) of ``verdict``: by verdict with ``reasons``, else the
+    two-color scheme of :data:`SIMPLE`."""
+    if reasons:
+        return LABELS[verdict], COLORS[verdict]
+    return SIMPLE.get(verdict, SIMPLE_OTHER)
+
+
+def legend_entries(verdicts, reasons):
+    """[(label, color)] in key order for the verdicts present, merged in the
+    two-color scheme."""
+    entries = []
+    for verdict in VERDICTS:
+        if verdict in verdicts and paint(verdict, reasons) not in entries:
+            entries.append(paint(verdict, reasons))
+    return entries
+
+
 def _style(ax, keep=("left", "bottom")):
     for side in ("top", "right", "left", "bottom"):
         ax.spines[side].set_visible(side in keep)
     ax.tick_params(length=0)
 
 
-def _panel_map(ax, rows, reactions, pairs, starts, column_labels, row_labels):
+def _panel_map(ax, rows, reactions, pairs, starts, column_labels, row_labels, reasons=False):
     """A: pair x reaction, one sub-cell per start, best verdict + TS / guesses.
     ``column_labels`` {reaction: text}, ``row_labels`` {pair label: text}."""
     from matplotlib.patches import Rectangle
@@ -230,9 +258,10 @@ def _panel_map(ax, rows, reactions, pairs, starts, column_labels, row_labels):
                     continue
                 best = min(part, key=lambda r: RANK[r["verdict"]])["verdict"]
                 ax.add_patch(Rectangle((x0 + .02, line + .05), width - .04, .9,
-                                       fc=COLORS[best], ec="none"))
+                                       fc=paint(best, reasons)[1], ec="none"))
                 n_ts = sum(r["verdict"] == "ts" for r in part)
-                dark = best in ("ts", "higher_order", "minimum", "failed")
+                dark = best in ("ts", "higher_order", "minimum", "failed") or (
+                    not reasons and best != "pending")
                 ax.text(x0 + width / 2, line + .5, "%d/%d" % (n_ts, len(part)), ha="center",
                         va="center", fontsize=8.5, fontweight="bold",
                         color="white" if dark else INK)
@@ -246,19 +275,18 @@ def _panel_map(ax, rows, reactions, pairs, starts, column_labels, row_labels):
     _style(ax, keep=())
 
 
-def _panel_bars(ax, rows, reactions, starts):
+def _panel_bars(ax, rows, reactions, starts, reasons=False):
     """B: verdict shares, one bar per (reaction, start)."""
     ticks, labels, y = [], [], 0.0
     for reaction in reactions:
         for k, start in enumerate(starts):
             part = [r for r in rows if r["reaction"] == reaction and r["start"] == start]
             left = 0.0
-            for verdict in VERDICTS:
-                n = sum(r["verdict"] == verdict for r in part)
-                if n:
-                    ax.barh(y, n / len(part), left=left, color=COLORS[verdict], height=.78,
-                            edgecolor="white", linewidth=.8)
-                    left += n / len(part)
+            for label, color in legend_entries({r["verdict"] for r in part}, reasons):
+                n = sum(paint(r["verdict"], reasons)[0] == label for r in part)
+                ax.barh(y, n / len(part), left=left, color=color, height=.78,
+                        edgecolor="white", linewidth=.8)
+                left += n / len(part)
             ax.text(1.02, y, "%d" % len(part), va="center", fontsize=7.5, color=SOFT)
             ticks.append(y)
             labels.append(("R%d  " % reaction if k == 0 else "") + start)
@@ -276,7 +304,7 @@ def _panel_bars(ax, rows, reactions, starts):
     _style(ax, keep=("bottom",))
 
 
-def _panel_bond_map(ax, rows, starts):
+def _panel_bond_map(ax, rows, starts, reasons=False):
     """C: normalised breaking vs forming bond length where each search ended."""
     from matplotlib.lines import Line2D
     from matplotlib.patches import Rectangle
@@ -291,9 +319,10 @@ def _panel_bond_map(ax, rows, starts):
     ax.text(hi - .05, 0.78, "forming bonds made", fontsize=7.5, color=SOFT, ha="right", va="bottom")
     for row in done:
         filled = row["start"] == starts[0]
+        color = paint(row["verdict"], reasons)[1]
         ax.scatter(min(row["break_norm_end"], hi - .02), min(row["form_norm_end"], hi - .02),
-                   s=26, zorder=3, facecolor=COLORS[row["verdict"]] if filled else "white",
-                   edgecolor=COLORS[row["verdict"]], linewidth=1.1, alpha=.9)
+                   s=26, zorder=3, facecolor=color if filled else "white",
+                   edgecolor=color, linewidth=1.1, alpha=.9)
     ax.set_xlim(0.75, hi)
     ax.set_ylim(0.75, hi)
     ax.set_aspect("equal")
@@ -344,10 +373,10 @@ def _panel_energies(ax, rows, reactions, starts):
               loc="upper right", frameon=False, fontsize=8)
 
 
-def plot_summary(rows, out_path, title):
+def plot_summary(rows, out_path, title, reasons=False):
     """The summary figure (module docstring) for ``rows`` from :func:`collect`.
-    ``title`` is the subtitle's run name. Sized to the number of reactions
-    and O pairs."""
+    ``title`` is the subtitle's run name; ``reasons`` colors by verdict
+    instead of TS / no TS. Sized to the number of reactions and O pairs."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -394,27 +423,30 @@ def plot_summary(rows, out_path, title):
              "finished   ·   %d TS found"
              % (title, len(reactions), len(pairs), len(guesses), len(finished), len(rows),
                 sum(r["verdict"] == "ts" for r in rows)), fontsize=10.5, color=SOFT)
-    present = [v for v in VERDICTS if any(r["verdict"] == v for r in rows)]
-    fig.legend(handles=[Patch(fc=COLORS[v], label=LABELS[v]) for v in present],
+    present = legend_entries({r["verdict"] for r in rows}, reasons)
+    fig.legend(handles=[Patch(fc=color, label=label) for label, color in present],
                loc="upper left", bbox_to_anchor=(1.6 / width - .004, 1 - 1.02 / height),
                ncol=len(present), frameon=False, fontsize=9.5, handlelength=1.2,
                columnspacing=1.6)
 
     ax = fig.add_subplot(gs[0, 0])
-    ax.set_title("A   Best outcome per O pair and reaction", pad=52)
-    _panel_map(ax, rows, reactions, pairs, starts, column_labels, row_labels)
+    ax.set_title("A   %s per O pair and reaction" % ("Best outcome" if reasons else "TS found"),
+                 pad=52)
+    _panel_map(ax, rows, reactions, pairs, starts, column_labels, row_labels, reasons)
     ax.text(0, len(pairs) + .25,
             "Each cell: one O pair for one reaction, split by start (%s).  Number: guesses that "
-            "ended as a TS / guesses searched.\nColor: the best outcome any of those guesses "
-            "reached (ranked as in the key, TS best)."
-            % " | ".join(starts), ha="left", va="top", fontsize=8, color=SOFT)
+            "ended as a TS / guesses searched.\nColor: %s"
+            % (" | ".join(starts),
+               "the best outcome any of those guesses reached (ranked as in the key, TS best)."
+               if reasons else "green if any of those guesses ended as a TS, red if none did."),
+            ha="left", va="top", fontsize=8, color=SOFT)
 
-    _panel_bars(fig.add_subplot(gs[0, 1]), rows, reactions, starts)
+    _panel_bars(fig.add_subplot(gs[0, 1]), rows, reactions, starts, reasons)
     fig.axes[-1].set_title("B   Verdicts by reaction and start", pad=12)
 
     ax = fig.add_subplot(gs[1, 0])
     ax.set_title("C   Where each search ended")
-    _panel_bond_map(ax, rows, starts)
+    _panel_bond_map(ax, rows, starts, reasons)
 
     ax = fig.add_subplot(gs[1, 1])
     ax.set_title("D   TS energies within each reaction")
