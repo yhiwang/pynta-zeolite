@@ -37,7 +37,7 @@ from ase.data import covalent_radii
 from ase.io.trajectory import Trajectory
 from ase.optimize import BFGS
 
-MULT = {"form": 1.35, "break": 1.35}   # TS length = (r_i + r_j) x this
+MULT = {"form": 1.2, "break": 1.2}   # TS length = (r_i + r_j) x this; fallback only; step 7 passes settings.TS_HARMONIC_MODES
 K_RESTRAINT = 30.0                     # eV/A^2
 FRAMEWORK_RADIUS = 4.0                 # A
 STEPS = {"framework": 100, "spectators": 20, "reacting": 100}
@@ -257,8 +257,32 @@ def adsorbate_bonds(atoms, n_framework, cutoff, skip=()):
                 found.add(pair)
     return found
 
+def endpoint_check(start, end, bonds, n_framework, springs, sites=(), cutoff=1.25):
+    """Bond check of a relaxed endpoint ``end`` against the raw guess ``start``.
+    ``sites`` are the seated oxygens; with the adsorbate they are the graph
+    atoms. A broken contact to a framework atom outside the graph (Al, Si,
+    other O) is ignored; a formed one is always kept."""
+    changing = [(i, j) for i, j, _ in bonds]
+    report = []
+    for i, j, change in bonds:
+        r = float(end.get_distance(i, j, mic=True))
+        report.append((i, j, change, r, bool(r < bond_cutoff(end, i, j, cutoff)),
+                       change in springs))
+    graph = set(range(n_framework, len(end))) | {int(s) for s in sites}
+    before = adsorbate_bonds(start, n_framework, cutoff, skip=changing)
+    after = adsorbate_bonds(end, n_framework, cutoff, skip=changing)
+    other = ([(i, j, "formed") for i, j in sorted(after - before)]
+             + [(i, j, "broken") for i, j in sorted(before - after)
+                if i in graph and j in graph])
+    if any(bonded != expected for _, _, _, _, bonded, expected in report):
+        verdict = "wrong_bonds"
+    elif other:
+        verdict = "other_bonds"
+    else:
+        verdict = "ok"
+    return report, other, verdict
 
-def state_relax(atoms, bonds, n_framework, model_path, springs, mult, free_relax,
+def state_relax(atoms, bonds, n_framework, model_path, springs, mult, free_relax, sites=(),
                 k=K_RESTRAINT, framework_radius=FRAMEWORK_RADIUS, steps=None,
                 max_cycles=MAX_CYCLES, e_tol=E_TOL, fmax=FMAX, free_steps=300,
                 cutoff=1.25, device="cpu", logfile=None, trajectory=None, log=None):
@@ -292,8 +316,7 @@ def state_relax(atoms, bonds, n_framework, model_path, springs, mult, free_relax
     log = log or (lambda line: None)
     atoms.pbc = True
     held = [bond for bond in bonds if bond[2] in springs]
-    changing = [(i, j) for i, j, _ in bonds]
-    before = adsorbate_bonds(atoms, n_framework, cutoff, skip=changing)
+    start = atoms.copy()                 # the raw guess, for the bond check
 
     mace = load_mace(model_path, device)
     own_log = isinstance(logfile, str)
@@ -337,22 +360,12 @@ def state_relax(atoms, bonds, n_framework, model_path, springs, mult, free_relax
     forces = atoms.get_forces()
     atoms.calc = None
 
-    report = []
-    for i, j, change in bonds:
-        r = float(atoms.get_distance(i, j, mic=True))
-        expected = (change in springs) if free_relax else None
-        report.append((i, j, change, r, bool(r < bond_cutoff(atoms, i, j, cutoff)), expected))
-    after = adsorbate_bonds(atoms, n_framework, cutoff, skip=changing)
-    other = ([(i, j, "formed") for i, j in sorted(after - before)]
-             + [(i, j, "broken") for i, j in sorted(before - after)])
-    verdict = None
-    if free_relax:
-        if any(bonded != expected for _, _, _, _, bonded, expected in report):
-            verdict = "wrong_bonds"
-        elif other:
-            verdict = "other_bonds"
-        else:
-            verdict = "ok"
+    report, other, verdict = endpoint_check(start, atoms, bonds, n_framework, springs,
+                                              sites=sites, cutoff=cutoff)
+    if not free_relax:                   # ts: nothing is expected, no verdict
+        report = [row[:5] + (None,) for row in report]
+        verdict = None
+
     return {"energy": energy, "forces": forces, "harmonic": harmonic,
             "free_steps": free_steps_done, "free_converged": free_converged,
             "bonds": report, "other": other, "verdict": verdict}

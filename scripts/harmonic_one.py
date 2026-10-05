@@ -54,7 +54,7 @@ def main(xyz_path, state):
 
     result = state_relax(
         atoms, bonds, n_framework, settings.MACE_MODEL,
-        springs=mode["springs"], mult=mode["mult"], free_relax=mode["free_relax"],
+        springs=mode["springs"], mult=mode["mult"], free_relax=mode["free_relax"], sites=record["oxygens"],
         k=settings.TS_HARMONIC_K, framework_radius=settings.TS_HARMONIC_FRAMEWORK_RADIUS,
         steps=settings.TS_HARMONIC_STEPS, max_cycles=settings.TS_HARMONIC_MAX_CYCLES,
         e_tol=settings.TS_HARMONIC_E_TOL, fmax=settings.TS_HARMONIC_FMAX,

@@ -107,7 +107,7 @@ TS_KEEP_PER_DIRECTION = None    # cap on clusters kept per pair and direction, o
 # --------------------------------------------------------------------------
 
 TS_HARMONIC_REACTIONS = None    # None: every reaction in TS_unique; or e.g. [0, 3]
-TS_HARMONIC_STATES = ("initial", "final")   # one job per guess and state; drop any
+TS_HARMONIC_STATES = ("ts", "initial", "final")   # one job per guess and state; drop any
 TS_HARMONIC_MODES = {           # per state: which bonds get springs, spring target
                                 # (r_i + r_j) x mult (r = covalent radius), and whether
                                 # a spring-free relax follows; "order" bonds never get one
