@@ -16,7 +16,7 @@ from _common import REPO
 # --------------------------------------------------------------------------
 
 CODE = "MOR"
-SITES = "T4"       # one T label ("T4") for a single Al, or a pair name
+SITES = "T1"       # one T label ("T4") for a single Al, or a pair name
                            # from the table step 0 prints ("T2-T4_5.65") for two
 RUN_DIR = os.path.join("runs", "%s_%s" % (CODE, SITES))
 REACTIONS = "reaction.yaml"
@@ -47,7 +47,7 @@ GAS_VACUUM = 10.0               # A of vacuum around a gas-phase molecule
 # step 2: relaxation and SLURM
 # --------------------------------------------------------------------------
 
-SUBMIT = False                   # False: write job dirs + job.sh only (dry run)
+SUBMIT = True                   # False: write job dirs + job.sh only (dry run)
 SKIP = ()                       # species names to leave out
 RELAX_FMAX = 0.05               # eV/A
 RELAX_MAX_STEPS = 100
@@ -149,3 +149,41 @@ TS_SELLA_MODE_MIN = 0.2         # the one imaginary mode must stretch a reacting
                                 # at least this (unit mode) for the verdict "ts"
 TS_SELLA_SLURM_CORES = 4
 TS_SELLA_SLURM_TIME = "03:00:00"
+
+# --------------------------------------------------------------------------
+# step 9: the starting band for the NEB (built on the login node, next to
+# initial.xyz / ts.xyz / final.xyz in NEB/.../<stem>/)
+# --------------------------------------------------------------------------
+
+NEB_IMAGES_BEFORE = 2           # images between the initial state and the TS
+NEB_IMAGES_AFTER = 2            # images between the TS and the final state
+                                # (band = IS + before + TS + after + FS)
+NEB_INTERPOLATION = "idpp"      # "idpp" or "linear", for each half-band
+NEB_FREE_RADIUS = TS_HARMONIC_FRAMEWORK_RADIUS   # A, framework atoms this close to
+                                # the adsorbate in IS, TS or FS move in the NEB
+# changing any of the four above rebuilds the band of every guess whose NEB
+# has not been submitted yet; bands with a job.id or a result are left alone
+
+# --------------------------------------------------------------------------
+# step 10: climbing-image NEB with MACE (one SLURM job per guess; SUBMIT,
+# PYTHON, MACE_MODEL, account, partition and memory as in step 2)
+# --------------------------------------------------------------------------
+
+NEB_REACTIONS = None            # None: every reaction in NEB/; or e.g. [0, 3]
+NEB_MAX_PER_REACTION = None     # submit only the N lowest-barrier guesses of each
+                                # reaction (Ea_fwd from step 9), or None for all
+NEB_RELAX_ENDPOINTS = True      # relax IS and FS once more with the band's free atoms
+                                # and this model before the NEB (to NEB_FMAX)
+NEB_SPRING = 0.1                # eV/A^2, spring constant between images
+NEB_METHOD = "improvedtangent"  # ASE NEB tangent
+NEB_FMAX_ROUGH = 0.5            # eV/A, first stage: band without climbing
+NEB_STEPS_ROUGH = 200
+NEB_CLIMB = True                # second stage: climbing image
+NEB_FMAX = 0.05                 # eV/A, converged when the climbing band is below this
+NEB_STEPS = 500
+NEB_TS_RMSD = 0.3               # A, adsorbate RMSD below which the highest image
+                                # counts as the Sella TS (verdict "connected")
+NEB_MIN_DEPTH = 0.05            # eV, an interior image this far below both
+                                # neighbours is an intermediate minimum
+NEB_SLURM_CORES = 4
+NEB_SLURM_TIME = "12:00:00"

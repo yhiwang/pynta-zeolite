@@ -72,6 +72,15 @@ TS_SUMMARY_CSV = "ts_summary.csv"     # TS_sella/: summarize_ts.py table, one ro
 TS_SUMMARY_PNG = "ts_summary.png"     # TS_sella/: summarize_ts.py figure
 ENDPOINT_SUMMARY_CSV = "endpoint_summary.csv"   # TS_harmonic/: summarize_endpoints.py table, one row per guess
 ENDPOINT_SUMMARY_PNG = "endpoint_summary.png"   # TS_harmonic/: summarize_endpoints.py figure
+NEB_RECORD = "neb.json"               # NEB/.../<stem>/: sources, MACE energies, bonds (step 9)
+NEB_STATES = {"initial": "initial.xyz", "ts": "ts.xyz", "final": "final.xyz"}   # NEB/.../<stem>/
+NEB_BAND = "band.traj"                # NEB/.../<stem>/: starting band, FixAtoms on every image (step 9)
+NEB_BAND_INFO = "band.json"           # NEB/.../<stem>/: how the band was built, free atoms (step 9)
+NEB_RESULT = "neb_result.json"        # NEB/.../<stem>/: written last by the step 10 job
+NEB_TRAJECTORY = "neb.traj"           # NEB/.../<stem>/: every image of every NEB step (step 10)
+NEB_LOG = "neb.log"                   # NEB/.../<stem>/: endpoint relax + FIRE log, both stages
+NEB_FINAL_BAND = "neb_band.traj"      # NEB/.../<stem>/: the band where the NEB stopped, MACE energy + forces
+NEB_PLOT = "neb.png"                  # NEB/.../<stem>/: energy along the final band
 DFT_CONFIG = "config.extxyz"          # DFT_sp/.../f<frame>/: one structure, MACE labels kept as mace_*
 DFT_SOURCE = "source.json"            # DFT_sp/.../f<frame>/: where the frame came from
 DFT_MANIFEST = "manifest.csv"         # DFT_sp/: one row per collected config
@@ -92,6 +101,7 @@ class RunLayout:
         self.ts_unique = os.path.join(run_dir, "TS_unique")
         self.ts_harmonic = os.path.join(run_dir, "TS_harmonic")
         self.ts_sella = os.path.join(run_dir, "TS_sella")
+        self.neb = os.path.join(run_dir, "NEB")
         self.dft_sp = os.path.join(run_dir, "DFT_sp")
         self.plots = run_dir
 

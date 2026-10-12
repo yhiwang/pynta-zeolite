@@ -166,17 +166,8 @@ The scripts take no command-line flags; `settings.py` is the one place a
 run is defined (`dft/` and `mace_ft/` read `CODE`, `SITES` and the run
 directory from it too).
 
-The key settings:
-
-- `CODE`: the framework, e.g. `"MOR"`.
-- `SITES`: one T label (`"T4"`) for a single Al, or a pair name from the
-  table step 0 prints (`"T2-T4_5.65"`) for two Al.
-- `SITE_RULE`: with two Al, `"cross"` keeps only O pairs with one O on each
-  Al; `"all"` keeps every first-shell O and pair. It is saved with the
-  framework, so don't change it inside an existing run directory.
-- `MACE_MODEL`: the model file for steps 2, 7 and 8 (`PYNTAZ_MODEL`).
-- `SUBMIT`: `False` writes every job folder and `job.sh` but submits
-  nothing (dry run).
+The key settings are `CODE`, `SITES`, `SITE_RULE`, `MACE_MODEL` and
+`SUBMIT`; see [Settings](#settings) for all of them.
 
 Output goes to `runs/<CODE>_<SITES>/`.
 
@@ -252,6 +243,80 @@ for a gas-phase molecule). `<stem>` names the orientation:
 `flip0_tor045-120_ax1_roll090` (TS guess). The summaries land next to the
 data they describe: `TS_harmonic/endpoint_summary.{csv,png}`,
 `TS_sella/ts_summary.{csv,png}`.
+
+---
+
+## Settings
+
+A run is defined by three settings files. The scripts take no flags, so
+every choice lives in one of these:
+
+| file | covers | read by |
+|---|---|---|
+| `scripts/settings.py` | the run (framework, Al sites, reactions), every step's thresholds, MACE model, SLURM | `scripts/`, `analysis/`, `dft/`, `mace_ft/` |
+| `dft/dft_settings.py` | frame selection, VASP parameters, train/valid/test split | `dft/` |
+| `mace_ft/ft_settings.py` | fine-tuning name, loss weights, epochs, GPU job | `mace_ft/` |
+
+`dft/` and `mace_ft/` take `CODE`, `SITES`, the run directory and
+`MACE_MODEL` from `scripts/settings.py`, so all three always work on the
+same run. Every value has a comment next to it in the file; the tables below
+are the ones you will actually change.
+
+### The run
+
+| setting | what it does |
+|---|---|
+| `CODE` | IZA framework code, e.g. `"MOR"`, `"MFI"`; read from `data/<CODE>.cif` if present |
+| `SITES` | one T label (`"T4"`) for one Al, or a pair name from step 0's table (`"T2-T4_5.65"`) for two |
+| `RUN_DIR` | `runs/<CODE>_<SITES>`; a new `CODE` or `SITES` means a new run directory |
+| `REACTIONS` | the reaction file, `reaction.yaml` |
+| `SITE_RULE` | two Al only: `"cross"` (O pairs bridging the two Al) or `"all"` (every first-shell O and pair). Saved in `framework.json` at step 0; never change it inside an existing run |
+| `MACE_MODEL` | model file for steps 2, 7 and 8 (env `PYNTAZ_MODEL`) |
+| `SUBMIT` | `False` writes every job folder and `job.sh` without submitting (dry run); used by steps 2, 7 and 8 |
+
+The SLURM block (`PYTHON`, `SLURM_ACCOUNT`, `SLURM_PARTITION`,
+`SLURM_MEMORY`) under step 2 is shared by steps 7 and 8, which only set
+their own core count and wall time.
+
+### Per step
+
+| step | settings | notes |
+|---|---|---|
+| 0 framework | `SUPERCELL_MIN_LENGTH`, `BIDENTATE_MAX_SPAN` | supercell edge (Å); longest O–O that counts as a site pair |
+| 1–3 adsorbates | `GAS_VACUUM`, `SKIP`, `RELAX_FMAX`, `RELAX_MAX_STEPS`, `BOND_CHANGE_THRESHOLD`, `RMSD_THRESHOLD` | orientation sweep sizes are in `pyntaz/placement.py` |
+| 5 TS guesses | `TS_MAX_SPAN`, `TS_TORSION_STEPS`, `TS_ROLL_STEPS`, `TS_SPAN_TOLERANCE`, `TS_SITE_SCALE_RANGE`, `TS_BOND_STRETCH`, `TS_CLEARANCE_MIN` | sweep size and how strictly a guess must fit its O–O pair |
+| 6 dedup | `TS_RMSD_THRESHOLD`, `TS_KEEP_PER_DIRECTION` | ~0.8 Å merges a 60° tail rotation, ~2 Å also merges C=C swaps; `1` keeps one guess per pair and direction |
+| 7 harmonic | `TS_HARMONIC_REACTIONS`, `TS_HARMONIC_STATES`, `TS_HARMONIC_MODES`, `TS_HARMONIC_K`, `TS_HARMONIC_FRAMEWORK_RADIUS`, `TS_HARMONIC_STEPS`, `TS_HARMONIC_MAX_CYCLES`, `TS_HARMONIC_FREE_STEPS`, `TS_HARMONIC_BOND_CUTOFF` | `TS_HARMONIC_MODES` sets, per state, which bonds get springs and their target (r_i + r_j) × `mult` |
+| 8 Sella | `TS_SELLA_REACTIONS`, `TS_SELLA_STARTS`, `TS_SELLA_FMAX`, `TS_SELLA_STEPS`, `TS_SELLA_INTERNAL`, `TS_SELLA_FREE_RADIUS`, `TS_SELLA_IMAG_CUTOFF`, `TS_SELLA_MODE_MIN` | the last two decide the verdict: imaginary modes below the cutoff are noise; the one real mode must stretch a reacting bond by at least `MODE_MIN` |
+
+The step 5 values are passed explicitly and some differ from the keyword
+defaults in `pyntaz/ts_graph.py`, so change them here, not there.
+
+### Common adjustments
+
+| situation | change |
+|---|---|
+| run only some reactions in steps 7–8 | `TS_HARMONIC_REACTIONS` / `TS_SELLA_REACTIONS`, e.g. `[0, 3]` |
+| too many TS guesses | two Al: `SITE_RULE = "cross"` (new run dir); raise `TS_RMSD_THRESHOLD`; `TS_KEEP_PER_DIRECTION = 1`; lower `TS_TORSION_STEPS` |
+| a reaction gives zero guesses | raise `TS_SPAN_TOLERANCE`, lower `TS_BOND_STRETCH` (long stretched bonds make the X–X span too wide), or widen `TS_SITE_SCALE_RANGE` |
+| endpoints end `not_converged` | raise `TS_HARMONIC_FREE_STEPS` |
+| Sella ends `not_converged` | raise `TS_SELLA_STEPS`, or try `TS_SELLA_INTERNAL = True` |
+| only one Sella start | `TS_SELLA_STARTS = ("harmonic",)` |
+| switch to a new MACE model | `MACE_MODEL`; rename `TS_harmonic/` and `TS_sella/` first to keep the old results |
+
+Steps 7 and 8 skip anything that already has a result. To redo them with
+new settings, rename or delete `TS_harmonic/` / `TS_sella/` (or the
+affected guess folders) and rerun.
+
+### DFT and fine-tuning
+
+| file | settings to know |
+|---|---|
+| `dft/dft_settings.py` | `COLLECT_STARTS`, `COLLECT_VERDICTS`, `COLLECT_MAX_FRAMES`, `COLLECT_MIN_DISP` (which Sella frames go to DFT); `SP_VASP` (RPBE-D3(BJ), 400 eV, Γ-point); `SP_LANES` (jobs running at once); `ATOM_ELEMENTS` (isolated atoms for E0s); `TRAIN_SPLIT_BY`, `TRAIN_VALID_FRACTION`, `TRAIN_TEST_FRACTION`, `TRAIN_HOLDOUT_REACTIONS`, `TRAIN_SEED` |
+| `mace_ft/ft_settings.py` | `FT_NAME` (output folder; a new name gives a second run side by side); `FT_ENERGY_WEIGHT`, `FT_FORCES_WEIGHT`; `FT_STAGE_TWO` and its weights; `FT_EPOCHS`; `FT_NUM_SAMPLES_PT` (Materials Project replay size); `FT_SLURM_PARTITION` |
+
+Each has its own dry-run switch: `COLLECT_WRITE`, `SP_SUBMIT`,
+`ATOM_SUBMIT`, `FT_SUBMIT`.
 
 ---
 

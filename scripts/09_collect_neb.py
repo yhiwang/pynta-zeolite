@@ -21,10 +21,25 @@ matches, as NEB needs. Energies are MACE (the model of steps 7 and 8):
 Ea_fwd = E_TS - E_initial, Ea_rev = E_TS - E_final, dE_rxn = E_final -
 E_initial. They are guesses until NEB / DFT confirm the TS.
 
-A guess folder that already has neb.json is left as it is (later NEB runs
-will live there), but its energies still go into the table; delete the
-folder to collect it again. Copies only, submits nothing; runs on the login
-node in seconds.
+Then the starting band for step 10, in the same folder:
+
+    <RUN_DIR>/NEB/<i>_rxn/pair_<k>/<stem>/band.traj   IS, NEB_IMAGES_BEFORE images, TS,
+                                                       NEB_IMAGES_AFTER images, FS
+    <RUN_DIR>/NEB/<i>_rxn/pair_<k>/<stem>/band.json   the settings it was built with,
+                                                       the TS index, the free atoms
+
+Two half-bands, IS -> TS and TS -> FS (NEB_INTERPOLATION, minimum image),
+so the band starts on the Sella saddle. The free atoms are the adsorbate
+and the framework within NEB_FREE_RADIUS of it in any of the three states
+(each state relaxed its own region, so the NEB frees the union); every
+other atom carries the same FixAtoms in every image (pyntaz/neb.py).
+
+A guess folder that already has neb.json keeps its three structures, but
+its energies still go into the table; delete the folder to collect it
+again. Its band is rebuilt whenever the four NEB band settings change, as
+long as the NEB has not been submitted (no job.id, no neb_result.json);
+a submitted band is never touched. Submits nothing; runs on the login node
+(the IDPP interpolation takes a few seconds per guess).
 """
 
 import csv
@@ -36,9 +51,9 @@ import sys
 import _common  # noqa: F401
 import layout
 import settings
+from ase.io import read, write
+from pyntaz.neb import build_band
 
-NEB_DIR = os.path.join(settings.RUN_DIR, "NEB")
-NEB_RECORD = "neb.json"
 BARRIERS_CSV = "barriers.csv"
 BARRIERS_PNG = "barriers.png"
 COLUMNS = ["reaction", "reaction_name", "pair", "stem", "ts_start", "E_initial", "E_ts",
@@ -84,6 +99,61 @@ def best_ts(sella_dir):
         return None
     _, start, result, structure = min(found, key=lambda item: item[0])
     return start, result, structure
+
+
+def collect(target, initial_path, ts_path, final_path, record, relative, index,
+            reaction_name, start, energies, imaginary):
+    """Copy the three structures into ``target`` and write neb.json."""
+    os.makedirs(target, exist_ok=True)
+    shutil.copy2(initial_path, os.path.join(target, layout.NEB_STATES["initial"]))
+    shutil.copy2(ts_path, os.path.join(target, layout.NEB_STATES["ts"]))
+    shutil.copy2(final_path, os.path.join(target, layout.NEB_STATES["final"]))
+    e_is, e_ts, e_fs = energies
+    with open(os.path.join(target, layout.NEB_RECORD), "w") as handle:
+        json.dump({"guess": relative, "reaction": reaction_name,
+                   "index": index, "n_framework": record["n_framework"],
+                   "oxygens": record["oxygens"], "bonds": record["bonds"],
+                   "ts_start": start,
+                   "sources": {"initial": os.path.relpath(initial_path, target),
+                               "ts": os.path.relpath(ts_path, target),
+                               "final": os.path.relpath(final_path, target)},
+                   "energies": {"initial": e_is, "ts": e_ts, "final": e_fs},
+                   "Ea_fwd": round(e_ts - e_is, 4), "Ea_rev": round(e_ts - e_fs, 4),
+                   "dE_rxn": round(e_fs - e_is, 4), "imaginary": imaginary},
+                  handle, indent=2)
+
+
+def band_settings():
+    """The settings a band is built with; a band built with others is stale."""
+    return {"n_before": settings.NEB_IMAGES_BEFORE, "n_after": settings.NEB_IMAGES_AFTER,
+            "interpolation": settings.NEB_INTERPOLATION,
+            "free_radius": float(settings.NEB_FREE_RADIUS)}
+
+
+def make_band(target, n_framework):
+    """Write band.traj / band.json into ``target`` unless they are up to
+    date or the NEB has started. Returns "built", "up to date" or "started"."""
+    if any(os.path.exists(os.path.join(target, name))
+           for name in (layout.JOB_ID, layout.NEB_RESULT)):
+        return "started"
+    wanted = band_settings()
+    band_path = os.path.join(target, layout.NEB_BAND)
+    info = load(os.path.join(target, layout.NEB_BAND_INFO))
+    if info and os.path.isfile(band_path) and {k: info.get(k) for k in wanted} == wanted:
+        return "up to date"
+    initial, ts, final = (read(os.path.join(target, layout.NEB_STATES[state]))
+                          for state in ("initial", "ts", "final"))
+    images, free = build_band(initial, ts, final, n_framework,
+                              n_before=wanted["n_before"], n_after=wanted["n_after"],
+                              method=wanted["interpolation"],
+                              free_radius=wanted["free_radius"])
+    write(band_path, images)
+    with open(os.path.join(target, layout.NEB_BAND_INFO), "w") as handle:
+        json.dump(dict(wanted, n_images=len(images), ts_index=wanted["n_before"] + 1,
+                       n_framework=n_framework, n_free=len(free),
+                       n_free_framework=sum(1 for i in free if i < n_framework),
+                       free=free), handle, indent=2)
+    return "built"
 
 
 def plot_barriers(rows, path, title):
@@ -136,6 +206,7 @@ if not os.path.isdir(run.ts_sella):
     sys.exit("%s not found -- run step 8 first" % run.ts_sella)
 
 rows, counts = [], {}
+bands = {"built": 0, "up to date": 0, "started": 0}
 for reaction_name in subdirs(run.ts_harmonic):
     head = reaction_name.split("_")[0]
     if not head.isdigit():
@@ -169,25 +240,14 @@ for reaction_name in subdirs(run.ts_harmonic):
                          "Ea_fwd": e_ts - e_is, "Ea_rev": e_ts - e_fs, "dE_rxn": e_fs - e_is,
                          "imag_cm": imaginary[0] if imaginary else None})
 
-            target = os.path.join(NEB_DIR, relative)
-            if os.path.isfile(os.path.join(target, NEB_RECORD)):
-                continue                     # collected before; may hold NEB runs now
-            os.makedirs(target, exist_ok=True)
-            shutil.copy2(initial[1], os.path.join(target, "initial.xyz"))
-            shutil.copy2(ts_path, os.path.join(target, "ts.xyz"))
-            shutil.copy2(final[1], os.path.join(target, "final.xyz"))
-            with open(os.path.join(target, NEB_RECORD), "w") as handle:
-                json.dump({"guess": relative, "reaction": rows[-1]["reaction_name"],
-                           "index": index, "n_framework": record["n_framework"],
-                           "oxygens": record["oxygens"], "bonds": record["bonds"],
-                           "ts_start": start,
-                           "sources": {"initial": os.path.relpath(initial[1], target),
-                                       "ts": os.path.relpath(ts_path, target),
-                                       "final": os.path.relpath(final[1], target)},
-                           "energies": {"initial": e_is, "ts": e_ts, "final": e_fs},
-                           "Ea_fwd": round(e_ts - e_is, 4), "Ea_rev": round(e_ts - e_fs, 4),
-                           "dE_rxn": round(e_fs - e_is, 4), "imaginary": imaginary},
-                          handle, indent=2)
+            target = os.path.join(run.neb, relative)
+            if not os.path.isfile(os.path.join(target, layout.NEB_RECORD)):
+                collect(target, initial[1], ts_path, final[1], record, relative, index,
+                        rows[-1]["reaction_name"], start, (e_is, e_ts, e_fs), imaginary)
+            outcome = make_band(target, record["n_framework"])
+            bands[outcome] += 1
+            if outcome == "built":
+                print("  band built   %s" % relative)
 
 print("%-9s %8s %10s %10s   %-8s %7s   %s"
       % ("reaction", "guesses", "IS+FS ok", "collected", "min Ea", "dE", "lowest-barrier guess"))
@@ -205,15 +265,19 @@ for index in sorted(counts):
 
 if not rows:
     sys.exit("\nno guess has a valid IS, TS and FS yet -- nothing collected")
-os.makedirs(NEB_DIR, exist_ok=True)
+os.makedirs(run.neb, exist_ok=True)
 rows.sort(key=lambda r: (r["reaction"], r["Ea_fwd"]))
-csv_path = os.path.join(NEB_DIR, BARRIERS_CSV)
+csv_path = os.path.join(run.neb, BARRIERS_CSV)
 with open(csv_path, "w", newline="") as handle:
     writer = csv.DictWriter(handle, fieldnames=COLUMNS, extrasaction="ignore")
     writer.writeheader()
     for row in rows:
         writer.writerow({k: (round(v, 4) if isinstance(v, float) else v) for k, v in row.items()})
-png_path = os.path.join(NEB_DIR, BARRIERS_PNG)
+png_path = os.path.join(run.neb, BARRIERS_PNG)
 plot_barriers(rows, png_path, os.path.relpath(settings.RUN_DIR))
 print("\nenergies in eV (MACE); min Ea = lowest E_TS - E_IS of that reaction, dE = its E_FS - E_IS")
-print("collected into %s\nwrote %s\n      %s" % (NEB_DIR, csv_path, png_path))
+print("bands: %d built, %d up to date, %d left alone (NEB submitted or done)   "
+      "[%d + %d images around the TS, %s]"
+      % (bands["built"], bands["up to date"], bands["started"], settings.NEB_IMAGES_BEFORE,
+         settings.NEB_IMAGES_AFTER, settings.NEB_INTERPOLATION))
+print("collected into %s\nwrote %s\n      %s" % (run.neb, csv_path, png_path))
