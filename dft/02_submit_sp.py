@@ -93,7 +93,7 @@ def queued_ids():
 
 def job_name(relative):
     """sp_R0_p03_f0012 -- short enough for squeue."""
-    rxn, pair, _, start, frame = relative.split(os.sep)
+    rxn, pair, _, start, frame = relative.split(os.sep)[-5:]
     return "sp_R%s_p%s_%s_%s" % (rxn.split("_")[0], pair.split("_")[-1],
                                 start[0], frame)
 

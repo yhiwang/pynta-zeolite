@@ -5,19 +5,33 @@ the pipeline. Edit here, not in the dft scripts."""
 import os
 
 # --------------------------------------------------------------------------
-# dft step 1: collect configs from the Sella trajectories
+# dft step 1: collect configs (sella / harmonic / neb)
 # --------------------------------------------------------------------------
 
-COLLECT_WRITE = True           # False: count and report only (dry run)
-COLLECT_REACTIONS = None        # None: every reaction in TS_sella; or e.g. [0, 3]
-COLLECT_STARTS = ("harmonic", "raw")    # which Sella starts to take frames from
-COLLECT_VERDICTS = None         # None: every verdict (failed runs are useful data);
-                                # or e.g. ("ts", "wrong_mode")
-COLLECT_STRIDE = 1              # look at every Nth Sella step (1: all of them)
-COLLECT_MIN_DISP = 0.1          # A, keep a frame once some atom has moved this far
-                                # since the last kept frame
-COLLECT_MAX_FRAMES = 3          # per trajectory, end points included; None: no cap
+COLLECT_WRITE = True            # False: count and report only (dry run)
+COLLECT_ROUND = "round2"        # configs go to DFT_sp/<round>/<source>/
+COLLECT_SOURCES = ("harmonic", "neb")   # any of these three
+COLLECT_REACTIONS = None        # None: every reaction; or e.g. [0, 3]
 COLLECT_MIN_DIST = 0.7          # A, frames with two atoms closer than this are dropped
+COLLECT_STRIDE = 1              # look at every Nth step (1: all of them)
+COLLECT_MIN_DISP = 0.1          # A, keep a frame once some atom has moved this far
+
+# sella: frames of TS_sella/.../<start>/sella.traj
+COLLECT_STARTS = ("harmonic", "raw")
+COLLECT_VERDICTS = None         # None: every verdict; or e.g. ("ts", "wrong_mode")
+COLLECT_MAX_FRAMES = 3          # per trajectory, end points included; None: no cap
+
+# harmonic: initial / final states of TS_harmonic (step 7)
+COLLECT_HARMONIC_STATES = ("initial", "final")
+COLLECT_HARMONIC_VERDICTS = None    # None: every verdict; or ("ok",)
+COLLECT_HARMONIC_MAX_FRAMES = 1     # 1: only the relaxed structure; more adds
+                                    # frames from the relax trajectory
+
+# neb: images of NEB/.../<stem>/
+COLLECT_NEB_BANDS = ("final_band",) # "start_band" (band.traj), "final_band" (neb_band.traj)
+COLLECT_NEB_ENDPOINTS = False       # final band's end points; they are close to the
+                                    # harmonic end points, so off when harmonic is collected
+COLLECT_NEB_VERDICTS = None         # None: every verdict; or ("connected",)
 
 # --------------------------------------------------------------------------
 # dft step 2: VASP single points on the collected configs (one SLURM job per
@@ -75,6 +89,11 @@ TRAIN_TEST_FRACTION = 0.1       # share going to test       (the rest is train)
 TRAIN_HOLDOUT_REACTIONS = []    # e.g. [6]: these reactions go to test entirely
 TRAIN_SEED = 0                  # fixes the random draw (same seed = same split)
 TRAIN_MAX_FORCE = 20.0          # eV/A, configs with any larger DFT force are dropped
+TRAIN_ROUNDS = None             # None: every round under DFT_sp; or ("round1", "round2")
+TRAIN_SOURCES = None            # None: every source; or ("sella", "neb")
+TRAIN_KEEP_SPLITS = {           # earlier split.csv to honour: {prefix: path}, both under DFT_sp
+    "round1/sella": "round1/training_round1/split.csv",
+}
 
 # --------------------------------------------------------------------------
 # dft step 4: isolated atoms for MACE's E0s (same settings as step 2, plus

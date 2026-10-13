@@ -5,7 +5,10 @@ and the name gives a second run side by side with the first."""
 
 import os
 
-FT_NAME = "ft_e1f10"            # folder <RUN_DIR>/MACE_ft/<FT_NAME>/
+FT_NAME = "ft_r2_e1f10"            # folder <RUN_DIR>/MACE_ft/<FT_NAME>/
+# always start from the original foundation model, not the pipeline's model
+FT_FOUNDATION = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                             "models", "mace-mpa-0-medium.model")
 FT_SUBMIT = True               # False: write config.yaml + job.sh only (dry run)
 
 # the mace-ft env's trainer, called directly (conda activate fails silently

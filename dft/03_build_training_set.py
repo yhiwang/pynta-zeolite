@@ -3,43 +3,46 @@
 
     python dft/03_build_training_set.py
 
-For every ``<RUN_DIR>/DFT_sp/.../f<frame>/`` with a finished OUTCAR, the
-config is written with its DFT labels under the names MACE trains on:
+For every ``<RUN_DIR>/DFT_sp/<round>/<source>/.../<config>/`` with a finished
+OUTCAR, the config is written with its DFT labels under the names MACE
+trains on:
 
     info["REF_energy"]    DFT energy (sigma -> 0), eV
     arrays["REF_forces"]  DFT forces in the config's atom order, eV/A
 
-The MACE labels (mace_energy, mace_forces) and the provenance (reaction,
-pair, start, verdict, frame, ...) stay alongside, under their own names.
-``config_type`` is set to "R<reaction>_<start>" so MACE reports errors per
-group.
+The MACE labels (mace_energy, mace_forces) and the provenance stay alongside
+under their own names; ``round`` and ``source`` are added from the path.
+``config_type`` is "R<reaction>_<source>" (R2_neb, R2_harmonic, R2_sella),
+so MACE reports errors per reaction and per source.
+
+TRAIN_ROUNDS / TRAIN_SOURCES pick which rounds and sources go in (None: all).
 
 Dropped, and listed in the report:
   - SCF that stopped at NELM without reaching EDIFF
   - any DFT force above TRAIN_MAX_FORCE (a broken geometry, not data)
   - OUTCAR geometry that does not match config.extxyz
 
-Split (TRAIN_SPLIT_BY):
-  "config"  every config goes to train / valid / test at random, in the
-            shares TRAIN_VALID_FRACTION and TRAIN_TEST_FRACTION
-  "run"     whole Sella runs are assigned instead (all frames of a run land
-            in the same set), so no test frame has a near-twin in train
-Either way the shuffle is done within each reaction, so every reaction
-appears in train, valid and test in the chosen shares.
-TRAIN_HOLDOUT_REACTIONS sends whole reactions to test in both modes. The
-seed TRAIN_SEED makes the split reproducible. Pass valid to MACE with
---valid_file (not --valid_fraction).
+Split: each config (TRAIN_SPLIT_BY = "config") or each run / band / state
+folder ("run": all frames of one Sella run or one NEB band land in the same
+set, so no test frame has a near-twin in train) is assigned to train, valid
+or test by a hash of its path and TRAIN_SEED, in the shares
+TRAIN_VALID_FRACTION and TRAIN_TEST_FRACTION. A hash, not a shuffle, so
+adding configs in a later round never moves the earlier ones.
+TRAIN_KEEP_SPLITS reuses an earlier split.csv for the configs it covers, so
+a test set stays a test set across rounds; TRAIN_HOLDOUT_REACTIONS sends
+whole reactions to test. Pass valid to MACE with --valid_file.
 
     <RUN_DIR>/DFT_sp/training/train.extxyz
     <RUN_DIR>/DFT_sp/training/valid.extxyz
     <RUN_DIR>/DFT_sp/training/test.extxyz
     <RUN_DIR>/DFT_sp/training/split.csv     which config went where, and why
 
-Read-only on the DFT folders, safe to rerun as more jobs finish (the three
+Read-only on the DFT folders, safe to rerun as more jobs finish (the four
 files are rewritten each time). Runs on the login node.
 """
 
 import csv
+import hashlib
 import os
 import sys
 from collections import Counter, defaultdict
@@ -52,24 +55,37 @@ import settings
 from ase.io import read, write
 from vasp_io import finished, read_dft, scf_converged
 
-TRAINING_DIR = "training"           # DFT_sp/
+TRAINING_DIR = "training"           # DFT_sp/ (folders starting with this are skipped)
 ATOMS_DIR = "DFT_atoms"             # <RUN_DIR>/DFT_atoms/<element>/, dft step 4
 TRAIN_FILE = "train.extxyz"
 VALID_FILE = "valid.extxyz"
 TEST_FILE = "test.extxyz"
 SPLIT_FILE = "split.csv"
+SETS = ("train", "valid", "test")
 
 
 def config_folders(root):
+    """[(relative, folder)] for every config.extxyz under DFT_sp, filtered
+    by TRAIN_ROUNDS / TRAIN_SOURCES (the first two path parts)."""
     found = []
     for dirpath, dirnames, files in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d != TRAINING_DIR]
-        if layout.DFT_CONFIG in files:
-            found.append((os.path.relpath(dirpath, root), dirpath))
+        dirnames[:] = [d for d in dirnames if not d.startswith(TRAINING_DIR)]
+        if layout.DFT_CONFIG not in files:
+            continue
+        relative = os.path.relpath(dirpath, root)
+        parts = relative.split(os.sep)
+        if len(parts) < 3:
+            print("skipped %s: expected DFT_sp/<round>/<source>/..." % relative)
+            continue
+        if ds.TRAIN_ROUNDS is not None and parts[0] not in ds.TRAIN_ROUNDS:
+            continue
+        if ds.TRAIN_SOURCES is not None and parts[1] not in ds.TRAIN_SOURCES:
+            continue
+        found.append((relative, dirpath))
     return sorted(found)
 
 
-def labelled(folder):
+def labelled(relative, folder):
     """(atoms with REF_* labels, None) or (None, reason it was dropped)."""
     if not finished(folder):
         return None, "not finished"
@@ -82,10 +98,13 @@ def labelled(folder):
         return None, "unreadable (%s)" % error
     if np.linalg.norm(forces, axis=1).max() > ds.TRAIN_MAX_FORCE:
         return None, "force above %.0f eV/A" % ds.TRAIN_MAX_FORCE
+    round_name, source, rxn = relative.split(os.sep)[:3]
+    config.info.setdefault("reaction", int(rxn.split("_")[0]))
     config.info["REF_energy"] = energy
     config.arrays["REF_forces"] = forces
-    config.info["config_type"] = "R%s_%s" % (config.info.get("reaction"),
-                                             config.info.get("start"))
+    config.info["round"] = round_name
+    config.info["source"] = source
+    config.info["config_type"] = "R%s_%s" % (config.info["reaction"], source)
     return config, None
 
 
@@ -110,30 +129,45 @@ def isolated_atoms(run_dir):
     return found
 
 
-def split(kept):
-    """{config: "train" | "valid" | "test"} for the kept (relative, atoms).
-    The shuffle is done separately within each reaction (stratified), so
-    every reaction appears in all three sets in the chosen shares."""
-    rng = np.random.default_rng(ds.TRAIN_SEED)
-    sets = {}
-    units = defaultdict(lambda: defaultdict(list))   # reaction -> unit -> configs
-    for relative, atoms in kept:
-        reaction = int(atoms.info["reaction"])
-        if reaction in ds.TRAIN_HOLDOUT_REACTIONS:
-            sets[relative] = "test"
+def earlier_splits(dft_sp):
+    """{config relative path: set} from the split.csv files in
+    TRAIN_KEEP_SPLITS, with the prefix put back on."""
+    kept = {}
+    for prefix, split_path in ds.TRAIN_KEEP_SPLITS.items():
+        path = os.path.join(dft_sp, split_path)
+        if not os.path.isfile(path):
+            print("warning: %s not found -- TRAIN_KEEP_SPLITS entry for %s ignored"
+                  % (path, prefix))
             continue
-        unit = os.path.dirname(relative) if ds.TRAIN_SPLIT_BY == "run" else relative
-        units[reaction][unit].append(relative)
-    for reaction in sorted(units):
-        names = sorted(units[reaction])
-        order = rng.permutation(len(names))
-        n_test = int(round(ds.TRAIN_TEST_FRACTION * len(names)))
-        n_valid = int(round(ds.TRAIN_VALID_FRACTION * len(names)))
-        for rank, k in enumerate(order):
-            which = ("test" if rank < n_test else
-                     "valid" if rank < n_test + n_valid else "train")
-            for relative in units[reaction][names[k]]:
-                sets[relative] = which
+        with open(path) as handle:
+            for row in csv.DictReader(handle):
+                if row["set"] in SETS:
+                    kept[os.path.join(prefix, row["config"])] = row["set"]
+    return kept
+
+
+def hashed_set(unit):
+    """train / valid / test from a hash of the unit's path (stable across reruns)."""
+    digest = hashlib.sha1(("%s:%s" % (ds.TRAIN_SEED, unit)).encode()).hexdigest()
+    u = int(digest[:12], 16) / 16 ** 12               # uniform in [0, 1)
+    if u < ds.TRAIN_TEST_FRACTION:
+        return "test"
+    if u < ds.TRAIN_TEST_FRACTION + ds.TRAIN_VALID_FRACTION:
+        return "valid"
+    return "train"
+
+
+def split(kept, earlier):
+    """{config: (set, reason)} for the kept (relative, atoms)."""
+    sets = {}
+    for relative, atoms in kept:
+        if int(atoms.info["reaction"]) in ds.TRAIN_HOLDOUT_REACTIONS:
+            sets[relative] = ("test", "held-out reaction")
+        elif relative in earlier:
+            sets[relative] = (earlier[relative], "earlier split")
+        else:
+            unit = os.path.dirname(relative) if ds.TRAIN_SPLIT_BY == "run" else relative
+            sets[relative] = (hashed_set(unit), "")
     return sets
 
 
@@ -141,11 +175,13 @@ def main():
     run = layout.RunLayout(settings.RUN_DIR)
     if not os.path.isdir(run.dft_sp):
         sys.exit("%s not found -- run the dft steps first" % run.dft_sp)
+    if ds.TRAIN_SPLIT_BY not in ("config", "run"):
+        sys.exit('TRAIN_SPLIT_BY must be "config" or "run"')
 
     kept, dropped = [], Counter()
     split_rows = []
     for relative, folder in config_folders(run.dft_sp):
-        atoms, reason = labelled(folder)
+        atoms, reason = labelled(relative, folder)
         if atoms is None:
             dropped[reason.split(" (")[0]] += 1
             split_rows.append({"config": relative, "set": "dropped", "reason": reason})
@@ -156,16 +192,12 @@ def main():
     if not kept:
         sys.exit("no finished single points yet")
 
-    if ds.TRAIN_SPLIT_BY not in ("config", "run"):
-        sys.exit('TRAIN_SPLIT_BY must be "config" or "run"')
-    sets = split(kept)
-    data = {"train": [], "valid": [], "test": []}
+    sets = split(kept, earlier_splits(run.dft_sp))
+    data = {which: [] for which in SETS}
     for relative, atoms in kept:
-        which = sets[relative]
+        which, reason = sets[relative]
         data[which].append(atoms)
-        split_rows.append({"config": relative, "set": which,
-                           "reason": "held-out reaction" if
-                           atoms.info["reaction"] in ds.TRAIN_HOLDOUT_REACTIONS else ""})
+        split_rows.append({"config": relative, "set": which, "reason": reason})
 
     # isolated atoms (dft step 4) go to train only: MACE takes its E0s from
     # every config_type=IsolatedAtom in the training file
@@ -177,7 +209,7 @@ def main():
 
     out = os.path.join(run.dft_sp, TRAINING_DIR)
     os.makedirs(out, exist_ok=True)
-    for which, name in (("train", TRAIN_FILE), ("valid", VALID_FILE), ("test", TEST_FILE)):
+    for which, name in zip(SETS, (TRAIN_FILE, VALID_FILE, TEST_FILE)):
         write(os.path.join(out, name), data[which], format="extxyz")
     with open(os.path.join(out, SPLIT_FILE), "w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=["config", "set", "reason"])
@@ -186,15 +218,21 @@ def main():
 
     # -- report --------------------------------------------------------------
     per_type = defaultdict(Counter)
+    per_round = defaultdict(Counter)
     for which, group in data.items():
         for atoms in group:
             per_type[atoms.info["config_type"]][which] += 1
+            if "round" in atoms.info:
+                per_round[atoms.info["round"]][which] += 1
     print("%-14s %6s %6s %6s" % ("config_type", "train", "valid", "test"))
     for name in sorted(per_type):
-        print("%-14s %6d %6d %6d" % (name, per_type[name]["train"],
-                                     per_type[name]["valid"], per_type[name]["test"]))
-    print("\nsplit by %s:  train %d, valid %d, test %d configs"
-          % (ds.TRAIN_SPLIT_BY, len(data["train"]), len(data["valid"]), len(data["test"])))
+        print("%-14s %6d %6d %6d" % ((name,) + tuple(per_type[name][w] for w in SETS)))
+    for name in sorted(per_round):
+        print("%-14s %6d %6d %6d" % ((name,) + tuple(per_round[name][w] for w in SETS)))
+    n_earlier = sum(1 for r in split_rows if r["reason"] == "earlier split")
+    print("\nsplit by %s:  train %d, valid %d, test %d configs (%d kept from an earlier split)"
+          % (ds.TRAIN_SPLIT_BY, len(data["train"]), len(data["valid"]), len(data["test"]),
+             n_earlier))
     print("isolated atoms in train: %s" % (", ".join(
         "%s %.4f eV" % (e, a.info["REF_energy"]) for e, a in atoms_e0.items()) or "none"))
     if missing:

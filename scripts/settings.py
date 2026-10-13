@@ -16,7 +16,7 @@ from _common import REPO
 # --------------------------------------------------------------------------
 
 CODE = "MOR"
-SITES = "T1"       # one T label ("T4") for a single Al, or a pair name
+SITES = "T4"       # one T label ("T4") for a single Al, or a pair name
                            # from the table step 0 prints ("T2-T4_5.65") for two
 RUN_DIR = os.path.join("runs", "%s_%s" % (CODE, SITES))
 REACTIONS = "reaction.yaml"
