@@ -25,7 +25,7 @@ REACTIONS = "reaction.yaml"
 # to DFT_sp/<ROUND>/<source>/), scripts/archive_round.py (TS_harmonic,
 # TS_sella, NEB move to <RUN_DIR>/<ROUND>/) and mace_ft (FT_NAME). To start
 # the next round: set ROUND and point MACE_MODEL at the new fine-tuned model.
-ROUND = "round2"
+ROUND = "round3"
 
 # --------------------------------------------------------------------------
 # step 0: framework and sites
@@ -69,7 +69,7 @@ PYTHON = os.environ.get(
 # the model steps 02-10 sample with: the fine-tuned model of the previous
 # round (copy it into models/ and change this line when a round ends)
 MACE_MODEL = os.environ.get(
-    "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa0-ft-MOR_T4-e1f10.model"))
+    "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa0-ft-MOR_T4-round2-e1f10.model"))
 
 SLURM_ACCOUNT = os.environ.get("PYNTAZ_SLURM_ACCOUNT", "ark245grp")
 SLURM_PARTITION = os.environ.get("PYNTAZ_SLURM_PARTITION", "high")
@@ -189,7 +189,7 @@ NEB_STEPS_ROUGH = 200
 NEB_CLIMB = True                # second stage: climbing image
 NEB_FMAX = 0.05                 # eV/A, converged when the climbing band is below this
 NEB_STEPS = 500
-NEB_TS_RMSD = 0.3               # A, adsorbate RMSD below which the highest image
+NEB_TS_RMSD = 0.25               # A, adsorbate RMSD below which the highest image
                                 # counts as the Sella TS (verdict "connected")
 NEB_MIN_DEPTH = 0.05            # eV, an interior image this far below both
                                 # neighbours is an intermediate minimum

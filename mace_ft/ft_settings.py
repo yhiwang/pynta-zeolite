@@ -20,7 +20,7 @@ FT_MACE_RUN_TRAIN = os.path.expanduser("~/.conda/envs/mace-ft/bin/mace_run_train
 # loss weights: stage one, then stage two (lower learning rate, more energy)
 FT_ENERGY_WEIGHT = 1.0
 FT_FORCES_WEIGHT = 10.0
-FT_STAGE_TWO = True
+FT_STAGE_TWO = False
 FT_STAGE_TWO_ENERGY_WEIGHT = 10.0
 FT_STAGE_TWO_FORCES_WEIGHT = 10.0
 

@@ -17,6 +17,7 @@ STEPS_ROUGH = 200
 FMAX = 0.05             # eV/A, band with the climbing image
 STEPS = 500
 TS_RMSD = 0.3           # A, adsorbate RMSD below which the top image is the Sella TS
+TS_BOND = 0.25
 MIN_DEPTH = 0.05        # eV, an interior image this far below both neighbours is a minimum
 
 
@@ -210,7 +211,7 @@ def interior_minima(energies, min_depth=MIN_DEPTH):
             and energies[i] < energies[i + 1] - min_depth]
 
 
-def analyze_band(images, energies, ts, n_framework, ts_energy=None, min_depth=MIN_DEPTH):
+def analyze_band(images, energies, ts, n_framework, ts_energy=None, min_depth=MIN_DEPTH, bonds=None):
     """Numbers for the verdict, from the converged band.
 
     ``ts`` is the Sella TS (same atom order), ``ts_energy`` its energy with
@@ -232,10 +233,17 @@ def analyze_band(images, energies, ts, n_framework, ts_energy=None, min_depth=MI
            "path_length": path_length(images)}
     if ts_energy is not None:
         out["top_minus_ts_energy"] = energies[top] - ts_energy
+
+    if bonds:
+        ts_lengths = [float(ts.get_distance(*b[:2], mic=True)) for b in bonds]
+        top_lengths = [float(images[top].get_distance(*b[:2], mic=True)) for b in bonds]
+        out["bonds_ts"] = ts_lengths
+        out["bonds_top"] = top_lengths
+        out["top_vs_ts_bond_max"] = max(abs(a - b) for a, b in zip(ts_lengths, top_lengths))
     return out
 
 
-def verdict(search, analysis, ts_rmsd=TS_RMSD):
+def verdict(search, analysis, ts_rmsd=TS_RMSD, ts_bond=TS_BOND):
     """One word for the band.
 
     not_converged   the last NEB stage did not reach its fmax
@@ -250,7 +258,8 @@ def verdict(search, analysis, ts_rmsd=TS_RMSD):
         return "not_converged"
     if analysis["minima"]:
         return "intermediate"
-    if analysis["top_vs_ts_rmsd"] > ts_rmsd:
+    if (analysis["top_vs_ts_rmsd"] > ts_rmsd
+            or analysis.get("top_vs_ts_bond_max", 0.0) > ts_bond):
         return "different_ts"
     return "connected"
 

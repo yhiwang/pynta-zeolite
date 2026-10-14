@@ -125,8 +125,8 @@ def main(band_path):
     write(os.path.join(out_dir, layout.NEB_FINAL_BAND), final_band)
 
     analysis = analyze_band(images, energies, sella_ts, n_framework, ts_energy=ts_energy,
-                            min_depth=settings.NEB_MIN_DEPTH)
-    outcome = verdict(search, analysis, settings.NEB_TS_RMSD)
+                            min_depth=settings.NEB_MIN_DEPTH, bonds=bonds)
+    outcome = verdict(search, analysis, settings.NEB_TS_RMSD, settings.NEB_TS_BOND)
     top = analysis["top_image"]
     print("\nhighest image %d: Ea_fwd %.3f, Ea_rev %.3f, dE %.3f eV"
           % (top, analysis["Ea_fwd"], analysis["Ea_rev"], analysis["dE_rxn"]))
@@ -139,7 +139,8 @@ def main(band_path):
     ts_lengths = lengths(sella_ts, bonds)
     print("\n%-22s %10s %10s" % ("bond", "Sella TS", "top image"))
     for name, a, b in zip(names, ts_lengths, top_lengths):
-        print("%-22s %10.3f %10.3f" % (name, a, b))
+        print("largest reacting-bond change %.3f A (limit %.2f)"
+          % (analysis["top_vs_ts_bond_max"], settings.NEB_TS_BOND))
     print("verdict  %s" % outcome)
 
     plot_band(os.path.join(out_dir, layout.NEB_PLOT), energies, analysis, ts_index,
@@ -159,6 +160,7 @@ def main(band_path):
                    "dE_rxn": analysis["dE_rxn"],
                    "top_vs_ts_rmsd": analysis["top_vs_ts_rmsd"],
                    "top_vs_ts_max": analysis["top_vs_ts_max"],
+                   "top_vs_ts_bond_max": analysis["top_vs_ts_bond_max"],
                    "top_minus_ts_energy": analysis["top_minus_ts_energy"],
                    "minima": analysis["minima"], "path_length": analysis["path_length"],
                    "bonds": [{"name": n, "indices": list(b[:2]), "sella_ts": a, "top": t}
@@ -166,6 +168,7 @@ def main(band_path):
                    "settings": {"spring": settings.NEB_SPRING, "method": settings.NEB_METHOD,
                                 "fmax_rough": settings.NEB_FMAX_ROUGH,
                                 "fmax": settings.NEB_FMAX, "ts_rmsd": settings.NEB_TS_RMSD,
+                                "ts_bond": settings.NEB_TS_BOND,
                                 "min_depth": settings.NEB_MIN_DEPTH}},
                   handle, indent=2)
 
