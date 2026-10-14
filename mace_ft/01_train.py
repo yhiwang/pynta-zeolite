@@ -92,8 +92,8 @@ def main():
     if not os.path.isfile(REPLAY_CACHE):
         sys.exit("replay data %s not found -- download it on the login node first"
                  % REPLAY_CACHE)
-    if not os.path.isfile(settings.MACE_MODEL):
-        sys.exit("foundation model %s not found" % settings.MACE_MODEL)
+    if not os.path.isfile(fs.FT_FOUNDATION):
+        sys.exit("foundation model %s not found" % fs.FT_FOUNDATION)
     if not os.access(fs.FT_MACE_RUN_TRAIN, os.X_OK):
         sys.exit("%s not found -- is the mace-ft env where FT_MACE_RUN_TRAIN says?"
                  % fs.FT_MACE_RUN_TRAIN)
@@ -112,7 +112,7 @@ def main():
 
     options = {
         "name": fs.FT_NAME,
-        "foundation_model": os.path.abspath(settings.MACE_MODEL),
+        "foundation_model": os.path.abspath(fs.FT_FOUNDATION),
         "multiheads_finetuning": True,
         "pt_train_file": "mp",
         "num_samples_pt": fs.FT_NUM_SAMPLES_PT,
@@ -154,7 +154,7 @@ def main():
             trainer=fs.FT_MACE_RUN_TRAIN, config=CONFIG))
 
     print("training data  %s  (%d configs + E0s)" % (data_dir, n_train))
-    print("foundation     %s" % settings.MACE_MODEL)
+    print("foundation     %s" % fs.FT_FOUNDATION)
     print("weights        E:F = %g:%g, stage two from epoch %s at %g:%g"
           % (fs.FT_ENERGY_WEIGHT, fs.FT_FORCES_WEIGHT, fs.FT_STAGE_TWO_START,
              fs.FT_STAGE_TWO_ENERGY_WEIGHT, fs.FT_STAGE_TWO_FORCES_WEIGHT)

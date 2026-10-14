@@ -253,7 +253,7 @@ every choice lives in one of these:
 
 | file | covers | read by |
 |---|---|---|
-| `scripts/settings.py` | the run (framework, Al sites, reactions), every step's thresholds, MACE model, SLURM | `scripts/`, `analysis/`, `dft/`, `mace_ft/` |
+| `scripts/settings.py` | the run (framework, Al sites, reactions), the round, every step's thresholds, MACE model, SLURM | `scripts/`, `analysis/`, `dft/`, `mace_ft/` |
 | `dft/dft_settings.py` | frame selection, VASP parameters, train/valid/test split | `dft/` |
 | `mace_ft/ft_settings.py` | fine-tuning name, loss weights, epochs, GPU job | `mace_ft/` |
 
@@ -354,18 +354,38 @@ python analysis/plot_mace_dft_energy.py   # optional: how far MACE is from DFT
 python mace_ft/01_train.py             # FT_SUBMIT = False: config.yaml + job.sh only
 ```
 
-Multihead replay fine-tuning of `settings.MACE_MODEL` on
-`DFT_sp/training/`: the DFT data becomes its own head and
+Multihead replay fine-tuning of `FT_FOUNDATION` (the original
+`mace-mpa-0-medium`, every round) on `DFT_sp/training/`, which step 3 builds
+from every round's DFT data: the DFT data becomes its own head and
 `FT_NUM_SAMPLES_PT` Materials Project structures are replayed alongside, so
 the model keeps its general chemistry. One GPU job on
-`FT_SLURM_PARTITION`; everything lands in `runs/<run>/MACE_ft/<FT_NAME>/`,
-including `*_cpu.model` files for the CPU pipeline. A new `FT_NAME` gives a
-second run side by side.
+`FT_SLURM_PARTITION`; everything lands in `runs/<run>/MACE_ft/<FT_NAME>/`
+(`ft_<ROUND>_e1f10`), including `*_cpu.model` files for the CPU pipeline.
 
-To use a fine-tuned model, copy its CPU file into `models/`, point
-`MACE_MODEL` (or `PYNTAZ_MODEL`) at it and rerun steps 7–8. Rename the old
-`TS_harmonic/` and `TS_sella/` first (e.g. `TS_harmonic_mpa0/`) to keep the
-earlier results.
+### Rounds
+
+Sampling (steps 7–10) → DFT (`dft/`) → fine-tune (`mace_ft/`) repeats, each
+round with the model the previous round produced. `ROUND` in
+`scripts/settings.py` names the round everywhere: `dft/01` writes configs to
+`DFT_sp/<ROUND>/<source>/`, `scripts/archive_round.py` moves `TS_harmonic/`,
+`TS_sella/` and `NEB/` to `runs/<run>/<ROUND>/`, and `mace_ft` trains into
+`MACE_ft/ft_<ROUND>_e1f10/`. `DFT_sp/` is never moved: every round's single
+points stay there and go into the next training set.
+
+To close a round and start the next one:
+
+```bash
+python dft/01_collect_configs.py       # all sources; already-collected folders are skipped
+python dft/02_submit_sp.py             # ... wait for the single points
+python dft/03_build_training_set.py
+python mace_ft/01_train.py             # ... wait for the GPU job
+cp runs/<run>/MACE_ft/ft_<ROUND>_e1f10/ft_<ROUND>_e1f10_cpu.model models/<new name>.model
+python scripts/archive_round.py        # dry run, then MOVE = True
+```
+
+then in `scripts/settings.py` set `ROUND` to the next name and `MACE_MODEL`
+to the new file, and rerun steps 7–10. `TS_unique/` (steps 5–6) stays: the
+guesses do not depend on the model.
 
 ---
 

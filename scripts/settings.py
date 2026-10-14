@@ -21,6 +21,12 @@ SITES = "T4"       # one T label ("T4") for a single Al, or a pair name
 RUN_DIR = os.path.join("runs", "%s_%s" % (CODE, SITES))
 REACTIONS = "reaction.yaml"
 
+# Which sampling -> DFT -> fine-tune round this is. Used by dft/01 (configs go
+# to DFT_sp/<ROUND>/<source>/), scripts/archive_round.py (TS_harmonic,
+# TS_sella, NEB move to <RUN_DIR>/<ROUND>/) and mace_ft (FT_NAME). To start
+# the next round: set ROUND and point MACE_MODEL at the new fine-tuned model.
+ROUND = "round2"
+
 # --------------------------------------------------------------------------
 # step 0: framework and sites
 # --------------------------------------------------------------------------
@@ -60,6 +66,8 @@ PYTHON = os.environ.get(
 # MACE_MODEL = os.environ.get(
 #     "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa-0-medium.model"))
 
+# the model steps 02-10 sample with: the fine-tuned model of the previous
+# round (copy it into models/ and change this line when a round ends)
 MACE_MODEL = os.environ.get(
     "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa0-ft-MOR_T4-e1f10.model"))
 

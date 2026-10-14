@@ -26,9 +26,9 @@ import _common  # noqa: F401
 import layout
 import settings
 
-ROUND = "round2"                              # same name as COLLECT_ROUND
+ROUND = settings.ROUND                        # from scripts/settings.py
 FOLDERS = ("TS_harmonic", "TS_sella", "NEB")  # the folders steps 07-10 write
-MOVE = True                                  # False: dry run
+MOVE = False                                  # False: dry run
 
 
 def queued_ids():

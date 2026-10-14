@@ -4,13 +4,16 @@ the pipeline. Edit here, not in the dft scripts."""
 
 import os
 
+import settings                 # the dft scripts put scripts/ on sys.path first
+
 # --------------------------------------------------------------------------
 # dft step 1: collect configs (sella / harmonic / neb)
 # --------------------------------------------------------------------------
 
 COLLECT_WRITE = True            # False: count and report only (dry run)
-COLLECT_ROUND = "round2"        # configs go to DFT_sp/<round>/<source>/
-COLLECT_SOURCES = ("harmonic", "neb")   # any of these three
+COLLECT_ROUND = settings.ROUND  # configs go to DFT_sp/<round>/<source>/
+COLLECT_SOURCES = ("sella", "harmonic", "neb")   # any of these three; a source
+                                # with nothing new just reports 0
 COLLECT_REACTIONS = None        # None: every reaction; or e.g. [0, 3]
 COLLECT_MIN_DIST = 0.7          # A, frames with two atoms closer than this are dropped
 COLLECT_STRIDE = 1              # look at every Nth step (1: all of them)

@@ -1,11 +1,13 @@
-"""How the MACE fine-tuning is set up. The run (RUN_DIR) and the foundation
-model (MACE_MODEL) come from scripts/settings.py. Edit here, not in the
-mace_ft scripts. Each FT_NAME gets its own folder, so changing the weights
-and the name gives a second run side by side with the first."""
+"""How the MACE fine-tuning is set up. The run (RUN_DIR) and the round
+(ROUND) come from scripts/settings.py. Edit here, not in the mace_ft
+scripts. Each FT_NAME gets its own folder, so changing the weights and the
+name gives a second run side by side with the first."""
 
 import os
 
-FT_NAME = "ft_r2_e1f10"            # folder <RUN_DIR>/MACE_ft/<FT_NAME>/
+import settings                 # the mace_ft scripts put scripts/ on sys.path first
+
+FT_NAME = "ft_%s_e1f10" % settings.ROUND   # folder <RUN_DIR>/MACE_ft/<FT_NAME>/
 # always start from the original foundation model, not the pipeline's model
 FT_FOUNDATION = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                              "models", "mace-mpa-0-medium.model")
