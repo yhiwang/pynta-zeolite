@@ -14,7 +14,7 @@ import os
 import numpy as np
 from ase.io import read
 
-NEB_DIR = "runs/MOR_T4/round2/NEB"
+NEB_DIR = "runs/MOR_T4/NEB"
 OUT_PNG = "neb_table.png"
 
 RANK = ["connected", "different_ts", "intermediate", "not_converged", "no json"]
