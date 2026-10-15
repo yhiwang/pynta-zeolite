@@ -191,6 +191,8 @@ NEB_FMAX = 0.05                 # eV/A, converged when the climbing band is belo
 NEB_STEPS = 500
 NEB_TS_RMSD = 0.25               # A, adsorbate RMSD below which the highest image
                                 # counts as the Sella TS (verdict "connected")
+NEB_TS_BOND = 0.25              # A, every reacting bond at the top must also be this close
+                                # to its Sella TS length (verdict "connected")
 NEB_MIN_DEPTH = 0.05            # eV, an interior image this far below both
                                 # neighbours is an intermediate minimum
 NEB_SLURM_CORES = 4
