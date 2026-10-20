@@ -86,6 +86,9 @@ DFT_SOURCE = "source.json"            # DFT_sp/.../f<frame>/: where the frame ca
 DFT_MANIFEST = "manifest.csv"         # DFT_sp/: one row per collected config
 DFT_ALL_CONFIGS = "all_configs.extxyz"   # DFT_sp/: every collected config, for ase gui
 GAS_SITE = "0"                        # site folder of a gas-phase species
+TS_COLLECT_STATES = {"initial": "initial.xyz", "ts": "ts.xyz", "final": "final.xyz"}  # DFT_TS/.../<stem>/ (step 11)
+TS_COLLECT_INFO = "ts_info.json"      # DFT_TS/.../<stem>/: reaction, site, bonds, NEB quality, MACE energies
+TS_COLLECT_CSV = "ts_collected.csv"   # DFT_TS/: one row per collected TS, with the ranking
 
 
 class RunLayout:
@@ -104,7 +107,8 @@ class RunLayout:
         self.neb = os.path.join(run_dir, "NEB")
         self.dft_sp = os.path.join(run_dir, "DFT_sp")
         self.plots = run_dir
-
+        self.dft_ts = os.path.join(run_dir, "DFT_TS")
+        
     def __repr__(self):
         return "RunLayout(%r)" % self.run_dir
 

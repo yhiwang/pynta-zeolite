@@ -12,12 +12,14 @@ FREE_RADIUS = 4.0       # A, framework atoms this close to the adsorbate move
 SAME_POSITION = 1e-3    # A, atoms that moved more than this between states are free
 SPRING = 0.1            # eV/A^2, NEB spring constant
 METHOD = "improvedtangent"
-FMAX_ROUGH = 0.5        # eV/A, band without climbing
+FMAX_ROUGH = 0.25       # eV/A, band without climbing; climb only once the band is this calm
 STEPS_ROUGH = 200
 FMAX = 0.05             # eV/A, band with the climbing image
 STEPS = 500
+MAXSTEP = 0.1           # A per atom per FIRE step; ASE's default 0.2 let bands blow up
+DTMAX = 0.5             # FIRE time step cap; ASE's default 1.0
 TS_RMSD = 0.3           # A, adsorbate RMSD below which the top image is the Sella TS
-TS_BOND = 0.25
+TS_BOND = 0.25          # A, every reacting bond at the top must be this close to its Sella TS length
 MIN_DEPTH = 0.05        # eV, an interior image this far below both neighbours is a minimum
 
 
@@ -157,20 +159,24 @@ def band_fmax(neb):
 
 def run_neb(images, spring=SPRING, method=METHOD, fmax_rough=FMAX_ROUGH,
             steps_rough=STEPS_ROUGH, climb=True, fmax=FMAX, steps=STEPS,
-            trajectory=None, logfile=None):
+            trajectory=None, logfile=None, maxstep=MAXSTEP, dtmax=DTMAX):
     """NEB on ``images`` in place: FIRE without climbing to ``fmax_rough``,
     then (``climb``) with the climbing image to ``fmax``.
 
     Every image must already have its calculator: the end points a fixed
     one (they never move), the interior an :class:`ImageCalculator`.
     ``trajectory`` collects every image of every step, both stages.
+    ``maxstep`` and ``dtmax`` cap FIRE's step and time step: with ASE's
+    defaults a late overshoot can push an atom into the framework, after
+    which the band never recovers.
 
     Returns a dict: ``converged`` (of the last stage run), ``fmax``,
     ``n_steps`` per stage and ``climbing_image`` (index of the highest
     interior image at the end, which climbs when ``climb``).
     """
     neb = NEB(images, k=spring, climb=False, method=method)
-    with FIRE(neb, trajectory=trajectory, logfile=logfile) as optimizer:
+    with FIRE(neb, trajectory=trajectory, logfile=logfile,
+              maxstep=maxstep, dtmax=dtmax) as optimizer:
         optimizer.run(fmax=fmax_rough, steps=steps_rough)
         n_rough = optimizer.nsteps
     rough = band_fmax(neb)
@@ -179,7 +185,7 @@ def run_neb(images, spring=SPRING, method=METHOD, fmax_rough=FMAX_ROUGH,
     if climb:
         neb.climb = True
         with FIRE(neb, trajectory=trajectory, logfile=logfile,
-                  append_trajectory=True) as optimizer:
+                  append_trajectory=True, maxstep=maxstep, dtmax=dtmax) as optimizer:
             optimizer.run(fmax=fmax, steps=steps)
             n_climb = optimizer.nsteps
         final = band_fmax(neb)
@@ -211,13 +217,16 @@ def interior_minima(energies, min_depth=MIN_DEPTH):
             and energies[i] < energies[i + 1] - min_depth]
 
 
-def analyze_band(images, energies, ts, n_framework, ts_energy=None, min_depth=MIN_DEPTH, bonds=None):
+def analyze_band(images, energies, ts, n_framework, ts_energy=None, min_depth=MIN_DEPTH,
+                 bonds=None):
     """Numbers for the verdict, from the converged band.
 
     ``ts`` is the Sella TS (same atom order), ``ts_energy`` its energy with
     the model the NEB used. The highest interior image is compared with
     it by the RMSD of the adsorbate atoms (minimum image, no superposition:
-    the framework holds both in place).
+    the framework holds both in place) and, when ``bonds`` (index pairs
+    of the reacting bonds) is given, by how much each of those bond lengths
+    differs: ``top_vs_ts_bond_max`` is the largest change.
     """
     energies = list(energies)
     top = int(np.argmax(energies[1:-1]) + 1)
@@ -233,7 +242,6 @@ def analyze_band(images, energies, ts, n_framework, ts_energy=None, min_depth=MI
            "path_length": path_length(images)}
     if ts_energy is not None:
         out["top_minus_ts_energy"] = energies[top] - ts_energy
-
     if bonds:
         ts_lengths = [float(ts.get_distance(*b[:2], mic=True)) for b in bonds]
         top_lengths = [float(images[top].get_distance(*b[:2], mic=True)) for b in bonds]
@@ -250,7 +258,9 @@ def verdict(search, analysis, ts_rmsd=TS_RMSD, ts_bond=TS_BOND):
     intermediate    the band dips into a minimum between the end points:
                     the reaction runs in two steps (or the band found a
                     detour), so one TS does not connect IS and FS
-    different_ts    a single barrier, but its top is not the Sella TS
+    different_ts    a single barrier, but its top is not the Sella TS: the
+                    adsorbate RMSD is above ``ts_rmsd`` or a reacting bond
+                    differs by more than ``ts_bond``
     connected       a single barrier whose top is the Sella TS: that TS
                     connects this initial and final state
     """

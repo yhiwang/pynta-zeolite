@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """DFT step 2: one VASP single point per config collected by step 1.
 
-    python dft/02_submit_sp.py        # SP_SUBMIT = False: write inputs + job.sh only
+    python dft/02_submit_sp.py                    # submit new configs, report the rest
+    python dft/02_submit_sp.py --resubmit-failed  # ... and submit the failed ones again
 
 For every ``<RUN_DIR>/DFT_sp/.../f<frame>/config.extxyz`` it writes, into
 the same folder:
@@ -9,7 +10,11 @@ the same folder:
     INCAR POSCAR KPOINTS POTCAR   from SP_VASP in dft/dft_settings.py
     ase-sort.dat                  VASP's element-sorted order -> config order
                                   (step 3 needs it to map forces back)
-    job.sh                        loads VASP_MODULE, runs VASP_BINARY with mpirun
+    job.sh                        loads VASP_MODULE, runs VASP_BINARY with mpirun,
+                                  then, only if the OUTCAR finished, deletes the
+                                  bulky outputs step 3 never reads (POTCAR,
+                                  vasprun.xml, vaspout.h5, DOSCAR, ...), so the
+                                  home quota only ever holds the jobs running now
 
 and submits it (``job.id`` holds the SLURM id, so a rerun never submits a
 queued job twice). With SP_LANES = N the jobs share N names and carry
@@ -19,12 +24,22 @@ N run at the same time. Every config reports one of:
     done          OUTCAR finished (has the timing block)
     in the queue  job.id present and the job is in squeue
     failed        job.id present, job gone from squeue, OUTCAR not finished
-                  -> look at job.err / vasp.out, then delete job.id to resubmit
-    would submit  inputs written, SP_SUBMIT = False
+                  -> look at job.err / vasp.out, then rerun with --resubmit-failed
+                     (or delete that folder's job.id and rerun)
+    resubmitted   failed, and --resubmit-failed sent it again: the outputs of the
+                  failed attempt (OUTCAR, vasp.out, job.err, ...) are deleted first,
+                  the inputs are kept, job.sh is rewritten
+    would submit  inputs written, SP_SUBMIT = False (also "would resubmit")
     submitted     sbatch accepted it (or "not yet": over SP_LIMIT this run)
 
+--resubmit-failed resubmits every failed config, whatever the reason, so read
+a few job.err / vasp.out first: a job that hit the time limit or a real VASP
+error will just fail again. When squeue cannot be reached nothing counts as
+failed, so nothing is resubmitted.
+
 Runs on the login node. Needs ase only (the POTCARs are concatenated here,
-from VASP_PP_PATH).
+from VASP_PP_PATH). dft/04 reuses JOB_TEMPLATE with the same format fields,
+so the template takes no new ones.
 """
 
 import os
@@ -41,7 +56,12 @@ from ase.io import read
 OUTCAR = "OUTCAR"
 VASP_INPUTS = ("INCAR", "POSCAR", "KPOINTS", "POTCAR")
 FINISHED_MARK = "General timing and accounting"   # last block of a finished OUTCAR
+RESUBMIT_FLAG = "--resubmit-failed"
+STALE_OUTPUTS = ("OUTCAR", "OSZICAR", "CONTCAR", "vasprun.xml", "vaspout.h5",
+                 "vasp.out", "job.out")            # plus layout.JOB_ERR
 
+# the cleanup line repeats FINISHED_MARK and lists the files by hand on purpose:
+# dft/04 formats this template with its own fields, so it can take no new ones
 JOB_TEMPLATE = """#!/bin/bash
 #SBATCH --job-name={name}
 #SBATCH --account={account}
@@ -58,6 +78,9 @@ module load {module}
 export OMP_NUM_THREADS=1
 cd "$SLURM_SUBMIT_DIR"
 mpirun -np $SLURM_NTASKS {binary} > vasp.out
+if grep -q "General timing and accounting" OUTCAR 2>/dev/null; then
+    rm -f POTCAR vasprun.xml vaspout.h5 DOSCAR EIGENVAL PROCAR XDATCAR PCDAT CHG CHGCAR WAVECAR
+fi
 """
 
 
@@ -117,6 +140,15 @@ def write_inputs(folder, relative, lane=None):
             module=ds.VASP_MODULE, binary=ds.VASP_BINARY))
 
 
+def clear_failed(folder):
+    """Delete what a failed attempt left behind; the inputs and job.id stay
+    (submit() overwrites job.id)."""
+    for name in STALE_OUTPUTS + (layout.JOB_ERR,):
+        path = os.path.join(folder, name)
+        if os.path.isfile(path):
+            os.remove(path)
+
+
 def submit(folder):
     out = subprocess.run(["sbatch", layout.JOB_SCRIPT], cwd=folder,
                          capture_output=True, text=True)
@@ -128,7 +160,16 @@ def submit(folder):
     return job_id
 
 
+def parse_args(argv):
+    unknown = [a for a in argv if a != RESUBMIT_FLAG]
+    if unknown:
+        sys.exit("unknown argument(s): %s   (the only option is %s)"
+                 % (" ".join(unknown), RESUBMIT_FLAG))
+    return RESUBMIT_FLAG in argv
+
+
 def main():
+    resubmit = parse_args(sys.argv[1:])
     run = layout.RunLayout(settings.RUN_DIR)
     if not os.path.isdir(run.dft_sp):
         sys.exit("%s not found -- run dft/01_collect_configs.py first" % run.dft_sp)
@@ -141,40 +182,52 @@ def main():
     if not configs:
         sys.exit("no %s under %s" % (layout.DFT_CONFIG, run.dft_sp))
     in_queue = queued_ids()
+    if resubmit and in_queue is None:
+        print("squeue unavailable: cannot tell failed from queued, nothing is resubmitted")
     status = Counter()
     n_new = 0
     for relative, folder in configs:
         if finished(folder):
             status["done"] += 1
             continue
+        previous = None                              # job id of a failed attempt
         id_path = os.path.join(folder, layout.JOB_ID)
         if os.path.isfile(id_path):
             with open(id_path) as handle:
                 job_id = handle.read().strip()
             if in_queue is None or job_id in in_queue:
                 status["in the queue"] += 1
-            else:
+                continue
+            if not resubmit:
                 status["failed"] += 1
-                print("failed   %s  (job %s; see job.err / vasp.out, delete job.id "
-                      "to resubmit)" % (relative, job_id))
-            continue
+                print("failed   %s  (job %s; see job.err / vasp.out, then rerun with %s)"
+                      % (relative, job_id, RESUBMIT_FLAG))
+                continue
+            previous = job_id
         if ds.SP_LIMIT is not None and n_new >= ds.SP_LIMIT:
             status["not yet (over SP_LIMIT)"] += 1
             continue
+        if previous is not None and ds.SP_SUBMIT:
+            clear_failed(folder)
         lanes = getattr(ds, "SP_LANES", None)
         write_inputs(folder, relative, None if not lanes else n_new % lanes)
         n_new += 1
+        again = previous is not None
         if ds.SP_SUBMIT:
             job_id = submit(folder)
-            status["submitted"] += 1
-            print("submitted %s  job %s" % (relative, job_id))
+            status["resubmitted" if again else "submitted"] += 1
+            print("%s %s  job %s%s" % ("resubmitted" if again else "submitted", relative,
+                                       job_id, " (was %s)" % previous if again else ""))
         else:
-            status["would submit"] += 1
-            print("would submit %s" % relative)
+            status["would resubmit" if again else "would submit"] += 1
+            print("%s %s" % ("would resubmit" if again else "would submit", relative))
 
     print("\n%d configs: " % len(configs)
           + ", ".join("%s %d" % (k, v) for k, v in sorted(status.items())))
-    if not ds.SP_SUBMIT and status["would submit"]:
+    if status["failed"]:
+        print("%d failed: read a few job.err / vasp.out, then rerun with %s"
+              % (status["failed"], RESUBMIT_FLAG))
+    if not ds.SP_SUBMIT and (status["would submit"] or status["would resubmit"]):
         print("dry run: inputs + job.sh written, nothing submitted. Check one INCAR, "
               "then set SP_SUBMIT = True in dft/dft_settings.py")
 

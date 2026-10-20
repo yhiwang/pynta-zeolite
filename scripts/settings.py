@@ -184,11 +184,11 @@ NEB_RELAX_ENDPOINTS = True      # relax IS and FS once more with the band's free
                                 # and this model before the NEB (to NEB_FMAX)
 NEB_SPRING = 0.1                # eV/A^2, spring constant between images
 NEB_METHOD = "improvedtangent"  # ASE NEB tangent
-NEB_FMAX_ROUGH = 0.5            # eV/A, first stage: band without climbing
-NEB_STEPS_ROUGH = 200
+NEB_FMAX_ROUGH = 0.25            # eV/A, first stage: band without climbing
+NEB_STEPS_ROUGH = 300
 NEB_CLIMB = True                # second stage: climbing image
 NEB_FMAX = 0.05                 # eV/A, converged when the climbing band is below this
-NEB_STEPS = 500
+NEB_STEPS = 1000
 NEB_TS_RMSD = 0.25               # A, adsorbate RMSD below which the highest image
                                 # counts as the Sella TS (verdict "connected")
 NEB_TS_BOND = 0.25              # A, every reacting bond at the top must also be this close
@@ -197,3 +197,12 @@ NEB_MIN_DEPTH = 0.05            # eV, an interior image this far below both
                                 # neighbours is an intermediate minimum
 NEB_SLURM_CORES = 4
 NEB_SLURM_TIME = "12:00:00"
+
+# --------------------------------------------------------------------------
+# step 11: collect the NEB TSs for DFT (login node, submits nothing)
+# --------------------------------------------------------------------------
+
+TS_COLLECT_VERDICTS = ("connected", "different_ts")   # neb_result.json verdicts to collect
+TS_COLLECT_REACTIONS = None     # None: every reaction in NEB/; or e.g. [0, 3]
+TS_DUPLICATE_RMSD = 0.1         # A, adsorbate RMSD below which two TSs of a reaction ...
+TS_DUPLICATE_ENERGY = 0.02      # eV, ... and energy gap below which they are the same TS
