@@ -89,6 +89,10 @@ GAS_SITE = "0"                        # site folder of a gas-phase species
 TS_COLLECT_STATES = {"initial": "initial.xyz", "ts": "ts.xyz", "final": "final.xyz"}  # DFT_TS/.../<stem>/ (step 11)
 TS_COLLECT_INFO = "ts_info.json"      # DFT_TS/.../<stem>/: reaction, site, bonds, NEB quality, MACE energies
 TS_COLLECT_CSV = "ts_collected.csv"   # DFT_TS/: one row per collected TS, with the ranking
+DFT_SELLA_DIR = "dft_sella"            # DFT_TS/.../<stem>/dft_sella/: the step 12 job runs here
+DFT_SELLA_STRUCTURE = "ts_dft.xyz"     # DFT_TS/.../<stem>/dft_sella/: where Sella stopped, DFT energy + forces
+DFT_SELLA_VASP = "vasp"                # DFT_TS/.../<stem>/dft_sella/vasp/: VASP's files, WAVECAR between steps
+DFT_SELLA_PROGRESS = "progress.json"   # DFT_TS/.../<stem>/dft_sella/: steps so far + last accepted geometry
 
 
 class RunLayout:

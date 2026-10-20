@@ -51,7 +51,7 @@ def free_atoms(atoms, n_framework, free_radius=FREE_RADIUS):
 
 
 def saddle_search(atoms, calc, free, fmax=FMAX, max_steps=MAX_STEPS,
-                  internal=INTERNAL, logfile=None, trajectory=None):
+                  internal=INTERNAL, logfile=None, trajectory=None, observer=None):
     """Run Sella (order 1) on ``atoms`` in place, only ``free`` atoms moving.
 
     Returns a dict: ``converged`` (largest force on a free atom below
@@ -67,6 +67,8 @@ def saddle_search(atoms, calc, free, fmax=FMAX, max_steps=MAX_STEPS,
     atoms.calc = calc
     optimizer = Sella(atoms, order=1, internal=internal,
                       logfile=logfile, trajectory=trajectory)
+    if observer is not None:
+        optimizer.attach(lambda: observer(atoms, optimizer.nsteps))
     optimizer.run(fmax=fmax, steps=max_steps)
     largest = float(np.linalg.norm(atoms.get_forces(), axis=1).max())  # fixed atoms read 0
     return {"converged": largest < fmax, "fmax": largest,

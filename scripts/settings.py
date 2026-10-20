@@ -206,3 +206,20 @@ TS_COLLECT_VERDICTS = ("connected", "different_ts")   # neb_result.json verdicts
 TS_COLLECT_REACTIONS = None     # None: every reaction in NEB/; or e.g. [0, 3]
 TS_DUPLICATE_RMSD = 0.1         # A, adsorbate RMSD below which two TSs of a reaction ...
 TS_DUPLICATE_ENERGY = 0.02      # eV, ... and energy gap below which they are the same TS
+
+# --------------------------------------------------------------------------
+# step 12: DFT Sella on the TSs step 11 collected (one SLURM job per TS;
+# VASP settings, module, POTCARs, account, partition, cores and memory from
+# dft/dft_settings.py, so the energies match the training data)
+# --------------------------------------------------------------------------
+
+DFT_SELLA_REACTIONS = None      # None: every reaction in ts_collected.csv; or e.g. [1]
+DFT_SELLA_WINDOW = 0.3          # eV above the lowest E_TS of the reaction (dE_ts_min);
+                                # None: every unique TS
+DFT_SELLA_FMAX = 0.05           # eV/A, converged when every free atom is below this
+DFT_SELLA_STEPS = 200           # Sella steps at most, all resumed parts together
+DFT_SELLA_INTERNAL = TS_SELLA_INTERNAL
+DFT_SELLA_VASP_CHANGES = dict(lwave=True)   # on top of SP_VASP: reuse WAVECAR each step
+DFT_SELLA_KEEP_WAVECAR = False  # delete WAVECAR and other bulky VASP files once converged
+DFT_SELLA_LANES = 14             # at most this many running at once (None: no limit)
+DFT_SELLA_SLURM_TIME = "24:00:00"   # a job that runs out continues with --resume
