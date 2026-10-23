@@ -5,10 +5,8 @@ starting from the MACE TS (see scripts/dft_sella_one.py).
     python scripts/12_submit_dft_sella.py            # submit new ones, report the rest
     python scripts/12_submit_dft_sella.py --resume   # ... and resubmit the stopped ones
 
-Which TSs: the rows of DFT_TS/ts_collected.csv with no duplicate_of, within
-DFT_SELLA_WINDOW eV of the lowest E_TS of their reaction (dE_ts_min; None:
-every unique TS), in DFT_SELLA_REACTIONS (None: all). Rerun step 11 first
-if new NEBs finished.
+Which TSs: every row of DFT_TS/ts_collected.csv (step 11 does the choosing).
+Rerun step 11 first if new NEBs finished.
 
     <RUN_DIR>/DFT_TS/<i>_rxn/pair_<k>/<stem>/job.id                  the SLURM id; step 11
                                                                     never rewrites this folder
@@ -59,9 +57,9 @@ import dft_settings as ds  # noqa: E402
 
 WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dft_sella_one.py")
 RESUME_FLAG = "--resume"
-REQUIRED_SETTINGS = ("DFT_SELLA_REACTIONS", "DFT_SELLA_WINDOW", "DFT_SELLA_FMAX",
-                     "DFT_SELLA_STEPS", "DFT_SELLA_INTERNAL", "DFT_SELLA_VASP_CHANGES",
-                     "DFT_SELLA_KEEP_WAVECAR", "DFT_SELLA_LANES", "DFT_SELLA_SLURM_TIME")
+REQUIRED_SETTINGS = ("DFT_SELLA_FMAX", "DFT_SELLA_STEPS", "DFT_SELLA_INTERNAL",
+                     "DFT_SELLA_VASP_CHANGES", "DFT_SELLA_KEEP_WAVECAR",
+                     "DFT_SELLA_LANES", "DFT_SELLA_SLURM_TIME")
 REQUIRED_LAYOUT = ("DFT_SELLA_DIR", "DFT_SELLA_STRUCTURE", "DFT_SELLA_VASP",
                    "TS_COLLECT_CSV", "TS_COLLECT_INFO", "TS_COLLECT_STATES")
 
@@ -147,23 +145,6 @@ def queued_ids():
     return {line.strip() for line in out.splitlines() if line.strip()}
 
 
-def select(rows):
-    """(picked rows, Counter of why the others were left out)."""
-    picked, skipped = [], Counter()
-    for row in rows:
-        if (settings.DFT_SELLA_REACTIONS is not None
-                and int(row["reaction"]) not in settings.DFT_SELLA_REACTIONS):
-            continue
-        if row["duplicate_of"]:
-            skipped["duplicate"] += 1
-        elif (settings.DFT_SELLA_WINDOW is not None
-              and float(row["dE_ts_min"]) > settings.DFT_SELLA_WINDOW):
-            skipped["outside the window"] += 1
-        else:
-            picked.append(row)
-    return picked, skipped
-
-
 def prepare(ts_dir, job_dir, row, lane=None):
     """start.xyz, ts_info.json and job.sh in job_dir; an existing start.xyz is
     kept, so a resumed job never gets a new start."""
@@ -203,7 +184,6 @@ def main():
         sys.exit("%s not found -- run scripts/11_collect_ts.py first" % table)
     with open(table) as handle:
         rows = list(csv.DictReader(handle))
-    picked, skipped = select(rows)
     in_queue = queued_ids()
     if resume and in_queue is None:
         print("squeue unavailable: cannot tell stopped from queued, nothing is resumed")
@@ -212,7 +192,7 @@ def main():
     lanes = settings.DFT_SELLA_LANES
     n_new = 0
     by_reaction = defaultdict(list)
-    for row in picked:
+    for row in rows:
         by_reaction[int(row["reaction"])].append(row)
     for index in sorted(by_reaction):
         print("R%-3d %s" % (index, by_reaction[index][0]["reaction_name"]))
@@ -254,9 +234,7 @@ def main():
                 status["would " + plain] += 1
                 print("  would %-8s %s" % (plain, label))
 
-    print("\n%d unique TSs picked (window %s eV), %s"
-          % (len(picked), settings.DFT_SELLA_WINDOW,
-             ", ".join("%s %d" % item for item in sorted(skipped.items())) or "none left out"))
+    print("\n%d TSs picked" % len(rows))
     print(", ".join("%s %d" % item for item in sorted(status.items())))
     if status["stopped"]:
         print("%d stopped: check one job.err, then rerun with %s" % (status["stopped"], RESUME_FLAG))
