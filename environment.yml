@@ -6,6 +6,7 @@ name: pyntaz-slim
 channels:
   - conda-forge
   - mjohnson541          # rmgmolecule
+  - nodefaults
 dependencies:
   - python=3.9
   - numpy=1.26.4         # rmgmolecule needs numpy<2
