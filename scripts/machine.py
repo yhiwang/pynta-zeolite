@@ -34,11 +34,11 @@ if MACHINE == "hive":
     VASP_PP_PATH = os.path.expanduser("~/vasp_pp")   # potpaw_PBE/ is a link to the
                                 # lab's grp_shared/PBE64 or PBE54 -- never mix them
 elif MACHINE == "perlmutter":
-    PYTHON = "SET_ME"
-    CPU_ACCOUNT = "SET_ME"
-    CPU_PARTITION = "SET_ME"
-    CPU_QOS = "SET_ME"
-    CPU_CONSTRAINT = "SET_ME"
+    PYTHON = "/global/common/software/m3548/ivan1007/envs/pyntaz-slim/bin/python"
+    CPU_ACCOUNT = "m3548"
+    CPU_PARTITION = ""
+    CPU_QOS = "shared"
+    CPU_CONSTRAINT = "cpu"
     CPU_EXTRA = []
     GPU_ACCOUNT = "SET_ME"
     GPU_PARTITION = "SET_ME"
