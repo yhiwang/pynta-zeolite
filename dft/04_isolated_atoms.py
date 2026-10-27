@@ -21,6 +21,7 @@ import sys
 import _common  # noqa: F401
 import dft_settings as ds
 import layout
+import machine
 import settings
 from ase import Atoms
 from ase.calculators.vasp import Vasp
@@ -44,18 +45,18 @@ def write_job(folder, element):
     Vasp(directory=folder, **params).write_input(atoms)
     with open(os.path.join(folder, layout.JOB_SCRIPT), "w") as handle:
         handle.write(submit_sp.JOB_TEMPLATE.format(
-            name="atom_%s" % element, dependency="",
-            account=ds.SP_SLURM_ACCOUNT, partition=ds.SP_SLURM_PARTITION,
-            tasks=ds.ATOM_SLURM_TASKS, memory=ds.SP_SLURM_MEMORY,
-            time=ds.ATOM_SLURM_TIME, err=layout.JOB_ERR,
-            module=ds.VASP_MODULE, binary=ds.VASP_BINARY))
+            header=machine.sbatch_header(
+                machine.VASP_CPUS_PER_RANK, ds.SP_SLURM_MEMORY, ds.ATOM_SLURM_TIME,
+                name="atom_%s" % element, tasks=ds.ATOM_SLURM_TASKS),
+            dependency="", setup="\n".join(machine.VASP_SETUP),
+            launch=machine.VASP_LAUNCH, binary=ds.VASP_BINARY))
 
 
 def main():
-    potpaw = os.path.join(ds.VASP_PP_PATH, "potpaw_PBE")
+    potpaw = os.path.join(machine.VASP_PP_PATH, "potpaw_PBE")
     if not os.path.isdir(potpaw):
         sys.exit("no POTCARs at %s -- link the lab set there first" % potpaw)
-    os.environ["VASP_PP_PATH"] = ds.VASP_PP_PATH
+    os.environ["VASP_PP_PATH"] = machine.VASP_PP_PATH
     root = os.path.join(settings.RUN_DIR, ATOMS_DIR)
     in_queue = submit_sp.queued_ids()
 

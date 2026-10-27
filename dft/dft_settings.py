@@ -2,8 +2,6 @@
 from scripts/settings.py, so the DFT stage always works on the same run as
 the pipeline. Edit here, not in the dft scripts."""
 
-import os
-
 import settings                 # the dft scripts put scripts/ on sys.path first
 
 # --------------------------------------------------------------------------
@@ -46,9 +44,6 @@ SP_LIMIT = None                 # submit at most this many new configs per run;
                                 # set 2-3 for a timing test first
 SP_LANES = 6                    # at most this many jobs running at a time (6 x 32 = 192 cores)
 
-VASP_PP_PATH = os.path.expanduser("~/vasp_pp")   # holds potpaw_PBE/ (a link to the
-                                # lab's grp_shared/PBE64 or PBE54 -- never mix them)
-VASP_MODULE = "vasp/6.5.1%nvhpc@24.9"
 VASP_BINARY = "vasp_gam"        # Gamma-point only build, matches kpts below
 
 # the lab's settings (RPBE-D3(BJ), 400 eV) as single points, closed shell
@@ -76,8 +71,6 @@ SP_VASP = dict(
     gamma=True,
 )
 
-SP_SLURM_ACCOUNT = "ark245grp"
-SP_SLURM_PARTITION = "high"
 SP_SLURM_TASKS = 32             # MPI ranks on one node
 SP_SLURM_MEMORY = "64G"
 SP_SLURM_TIME = "00:30:00"

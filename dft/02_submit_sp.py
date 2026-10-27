@@ -10,7 +10,7 @@ the same folder:
     INCAR POSCAR KPOINTS POTCAR   from SP_VASP in dft/dft_settings.py
     ase-sort.dat                  VASP's element-sorted order -> config order
                                   (step 3 needs it to map forces back)
-    job.sh                        loads VASP_MODULE, runs VASP_BINARY with mpirun,
+    job.sh                        runs VASP_SETUP, then VASP_BINARY with VASP_LAUNCH,
                                   then, only if the OUTCAR finished, deletes the
                                   bulky outputs step 3 never reads (POTCAR,
                                   vasprun.xml, vaspout.h5, DOSCAR, ...), so the
@@ -50,6 +50,7 @@ from collections import Counter
 import _common  # noqa: F401
 import dft_settings as ds
 import layout
+import machine
 import settings
 from ase.io import read
 
@@ -63,21 +64,12 @@ STALE_OUTPUTS = ("OUTCAR", "OSZICAR", "CONTCAR", "vasprun.xml", "vaspout.h5",
 # the cleanup line repeats FINISHED_MARK and lists the files by hand on purpose:
 # dft/04 formats this template with its own fields, so it can take no new ones
 JOB_TEMPLATE = """#!/bin/bash
-#SBATCH --job-name={name}
-#SBATCH --account={account}
-#SBATCH --partition={partition}
-#SBATCH --nodes=1
-#SBATCH --ntasks={tasks}
-#SBATCH --cpus-per-task=1
-#SBATCH --mem={memory}
-#SBATCH --time={time}
-#SBATCH --output=job.out
-#SBATCH --error={err}
+{header}
 {dependency}
-module load {module}
+{setup}
 export OMP_NUM_THREADS=1
 cd "$SLURM_SUBMIT_DIR"
-mpirun -np $SLURM_NTASKS {binary} > vasp.out
+{launch} {binary} > vasp.out
 if grep -q "General timing and accounting" OUTCAR 2>/dev/null; then
     rm -f POTCAR vasprun.xml vaspout.h5 DOSCAR EIGENVAL PROCAR XDATCAR PCDAT CHG CHGCAR WAVECAR
 fi
@@ -132,12 +124,13 @@ def write_inputs(folder, relative, lane=None):
         Vasp(directory=folder, **ds.SP_VASP).write_input(atoms)
     with open(os.path.join(folder, layout.JOB_SCRIPT), "w") as handle:
         handle.write(JOB_TEMPLATE.format(
-            name=job_name(relative) if lane is None else "sp_lane%02d" % lane,
+            header=machine.sbatch_header(
+                machine.VASP_CPUS_PER_RANK, ds.SP_SLURM_MEMORY, ds.SP_SLURM_TIME,
+                name=job_name(relative) if lane is None else "sp_lane%02d" % lane,
+                tasks=ds.SP_SLURM_TASKS),
             dependency="" if lane is None else "#SBATCH --dependency=singleton\n",
-            account=ds.SP_SLURM_ACCOUNT,
-            partition=ds.SP_SLURM_PARTITION, tasks=ds.SP_SLURM_TASKS,
-            memory=ds.SP_SLURM_MEMORY, time=ds.SP_SLURM_TIME, err=layout.JOB_ERR,
-            module=ds.VASP_MODULE, binary=ds.VASP_BINARY))
+            setup="\n".join(machine.VASP_SETUP), launch=machine.VASP_LAUNCH,
+            binary=ds.VASP_BINARY))
 
 
 def clear_failed(folder):
@@ -173,10 +166,10 @@ def main():
     run = layout.RunLayout(settings.RUN_DIR)
     if not os.path.isdir(run.dft_sp):
         sys.exit("%s not found -- run dft/01_collect_configs.py first" % run.dft_sp)
-    potpaw = os.path.join(ds.VASP_PP_PATH, "potpaw_PBE")
+    potpaw = os.path.join(machine.VASP_PP_PATH, "potpaw_PBE")
     if not os.path.isdir(potpaw):
         sys.exit("no POTCARs at %s -- link the lab set there first" % potpaw)
-    os.environ["VASP_PP_PATH"] = ds.VASP_PP_PATH
+    os.environ["VASP_PP_PATH"] = machine.VASP_PP_PATH
 
     configs = config_folders(run.dft_sp)
     if not configs:

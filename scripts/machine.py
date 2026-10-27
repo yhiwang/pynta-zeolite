@@ -26,6 +26,13 @@ if MACHINE == "hive":
     GPU_EXTRA = []
     # the mace-ft env's trainer, called directly (mace_ft/01_train.py)
     FT_MACE_RUN_TRAIN = os.path.expanduser("~/.conda/envs/mace-ft/bin/mace_run_train")
+    # VASP (dft/02, dft/04, scripts/12): lines job.sh runs first, the MPI launch
+    # (the binary follows it), CPUs per MPI rank, and the folder with potpaw_PBE/
+    VASP_SETUP = ["module load vasp/6.5.1%nvhpc@24.9"]
+    VASP_LAUNCH = "mpirun -np $SLURM_NTASKS"
+    VASP_CPUS_PER_RANK = 1
+    VASP_PP_PATH = os.path.expanduser("~/vasp_pp")   # potpaw_PBE/ is a link to the
+                                # lab's grp_shared/PBE64 or PBE54 -- never mix them
 elif MACHINE == "perlmutter":
     PYTHON = "SET_ME"
     CPU_ACCOUNT = "SET_ME"
@@ -40,14 +47,18 @@ elif MACHINE == "perlmutter":
     GPU_REQUEST = "SET_ME"
     GPU_EXTRA = []
     FT_MACE_RUN_TRAIN = "SET_ME"
+    VASP_SETUP = ["SET_ME"]
+    VASP_LAUNCH = "SET_ME"
+    VASP_CPUS_PER_RANK = "SET_ME"
+    VASP_PP_PATH = "SET_ME"
 else:
     sys.exit('MACHINE = "%s" in scripts/settings.py is not in scripts/machine.py '
              '(known: hive, perlmutter)' % MACHINE)
 
 
-def sbatch_header(cores, memory, time, name=None, gpu=False):
-    """The #SBATCH lines of a one-task CPU job, or of a one-GPU job with
-    gpu=True, without a final newline."""
+def sbatch_header(cores, memory, time, name=None, gpu=False, tasks=1):
+    """The #SBATCH lines of a CPU job (``tasks`` tasks, ``cores`` CPUs each),
+    or of a one-GPU job with gpu=True, without a final newline."""
     if gpu:
         account, partition, qos, constraint, extra = (
             GPU_ACCOUNT, GPU_PARTITION, GPU_QOS, GPU_CONSTRAINT, GPU_EXTRA)
@@ -64,9 +75,9 @@ def sbatch_header(cores, memory, time, name=None, gpu=False):
     options += extra
     options.append("--nodes=1")
     if not gpu:
-        options.append("--ntasks=1")
+        options.append("--ntasks=%s" % tasks)
     elif GPU_REQUEST:
         options.append(GPU_REQUEST)
-    options += ["--cpus-per-task=%d" % cores, "--mem=%s" % memory, "--time=%s" % time,
+    options += ["--cpus-per-task=%s" % cores, "--mem=%s" % memory, "--time=%s" % time,
                 "--output=job.out", "--error=job.err"]
     return "\n".join("#SBATCH " + option for option in options)

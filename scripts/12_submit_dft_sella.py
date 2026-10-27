@@ -28,9 +28,10 @@ A search that ended not_converged (DFT_SELLA_STEPS used up) has a result;
 to continue it, raise DFT_SELLA_STEPS, delete dft_sella/result.json and rerun
 with --resume.
 
-VASP settings, module, binary, POTCARs, account, partition, cores and memory
-come from dft/dft_settings.py (SP_VASP + DFT_SELLA_VASP_CHANGES), so the DFT
-TS energies are on the same footing as the training data. Disk: each running
+VASP settings, binary, ranks and memory come from dft/dft_settings.py (SP_VASP
++ DFT_SELLA_VASP_CHANGES), and the module, launch, POTCARs, account and
+partition from scripts/machine.py, the same ones dft/02 uses, so the DFT TS
+energies are on the same footing as the training data. Disk: each running
 job keeps a WAVECAR (a few hundred MB) in vasp/ until it converges, so with
 DFT_SELLA_LANES = N the jobs share N names and carry --dependency=singleton:
 all can be queued at once while at most N run (None: no limit).
@@ -65,23 +66,14 @@ REQUIRED_LAYOUT = ("DFT_SELLA_DIR", "DFT_SELLA_STRUCTURE", "DFT_SELLA_VASP",
                    "TS_COLLECT_CSV", "TS_COLLECT_INFO", "TS_COLLECT_STATES")
 
 JOB_TEMPLATE = """#!/bin/bash
-#SBATCH --job-name=%(name)s
-#SBATCH --account=%(account)s
-#SBATCH --partition=%(partition)s
-#SBATCH --nodes=1
-#SBATCH --ntasks=%(tasks)d
-#SBATCH --cpus-per-task=1
-#SBATCH --mem=%(memory)s
-#SBATCH --time=%(time)s
-#SBATCH --output=job.out
-#SBATCH --error=job.err
+%(header)s
 %(dependency)s
-module load %(module)s
+%(setup)s
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export PYTHONPATH=%(repo)s:$PYTHONPATH
 export VASP_PP_PATH=%(pp)s
-export ASE_VASP_COMMAND="mpirun -np $SLURM_NTASKS %(binary)s"
+export ASE_VASP_COMMAND="%(launch)s %(binary)s"
 cd "$SLURM_SUBMIT_DIR"
 
 # the env python directly: `conda activate` fails silently in batch jobs
@@ -98,7 +90,7 @@ def check_setup():
                  "and this script)" % ", ".join(missing))
     for name, path in (("PYTHON", machine.PYTHON), ("WORKER", WORKER),
                        ("VASP_PP_PATH/potpaw_PBE",
-                        os.path.join(ds.VASP_PP_PATH, "potpaw_PBE"))):
+                        os.path.join(machine.VASP_PP_PATH, "potpaw_PBE"))):
         if not os.path.exists(path):
             sys.exit("%s does not exist: %s" % (name, path))
 
@@ -117,16 +109,15 @@ def job_script(name, lane=None):
     once, which caps the WAVECARs on disk."""
     if lane is not None:
         name = "ds_lane%02d" % lane
-    return JOB_TEMPLATE % {"name": name,
+    return JOB_TEMPLATE % {"header": machine.sbatch_header(
+                               machine.VASP_CPUS_PER_RANK, ds.SP_SLURM_MEMORY,
+                               settings.DFT_SELLA_SLURM_TIME, name=name,
+                               tasks=ds.SP_SLURM_TASKS),
                            "dependency": "" if lane is None
                            else "#SBATCH --dependency=singleton\n",
-                           "account": ds.SP_SLURM_ACCOUNT,
-                           "partition": ds.SP_SLURM_PARTITION,
-                           "tasks": ds.SP_SLURM_TASKS,
-                           "memory": ds.SP_SLURM_MEMORY,
-                           "time": settings.DFT_SELLA_SLURM_TIME,
-                           "module": ds.VASP_MODULE, "binary": ds.VASP_BINARY,
-                           "pp": ds.VASP_PP_PATH, "repo": _common.REPO,
+                           "setup": "\n".join(machine.VASP_SETUP),
+                           "launch": machine.VASP_LAUNCH, "binary": ds.VASP_BINARY,
+                           "pp": machine.VASP_PP_PATH, "repo": _common.REPO,
                            "python": machine.PYTHON, "worker": WORKER,
                            "start": layout.TS_START}
 
