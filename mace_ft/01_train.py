@@ -4,9 +4,10 @@
     python mace_ft/01_train.py         # FT_SUBMIT = False: write config.yaml + job.sh only
 
 Writes ``<RUN_DIR>/MACE_ft/<FT_NAME>/config.yaml`` (every mace_run_train
-option, readable and kept with the results) and ``job.sh`` (one GPU on
-FT_SLURM_PARTITION), then submits it. The job runs in that folder, so the
-logs, checkpoints, the replay subset and the final model all land there:
+option, readable and kept with the results) and ``job.sh`` (one GPU; the
+cluster values come from scripts/machine.py), then submits it. The job
+runs in that folder, so the logs, checkpoints, the replay subset and the
+final model all land there:
 
     <FT_NAME>.model            the fine-tuned model (GPU)
     <FT_NAME>_compiled.model   same, compiled
@@ -34,6 +35,7 @@ import sys
 import _common  # noqa: F401
 import ft_settings as fs
 import layout
+import machine
 import settings
 from ase.io import read
 
@@ -47,16 +49,7 @@ REPLAY_CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME",
                             "mace", "mp_traj_combinedxyz")
 
 JOB_TEMPLATE = """#!/bin/bash
-#SBATCH --job-name={name}
-#SBATCH --account={account}
-#SBATCH --partition={partition}
-#SBATCH --nodes=1
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task={cpus}
-#SBATCH --mem={memory}
-#SBATCH --time={time}
-#SBATCH --output=job.out
-#SBATCH --error={err}
+{header}
 
 cd "$SLURM_SUBMIT_DIR"
 export OMP_NUM_THREADS={cpus}
@@ -94,9 +87,9 @@ def main():
                  % REPLAY_CACHE)
     if not os.path.isfile(fs.FT_FOUNDATION):
         sys.exit("foundation model %s not found" % fs.FT_FOUNDATION)
-    if not os.access(fs.FT_MACE_RUN_TRAIN, os.X_OK):
-        sys.exit("%s not found -- is the mace-ft env where FT_MACE_RUN_TRAIN says?"
-                 % fs.FT_MACE_RUN_TRAIN)
+    if not os.access(machine.FT_MACE_RUN_TRAIN, os.X_OK):
+        sys.exit("%s not found -- is the mace-ft env where FT_MACE_RUN_TRAIN in "
+                 "scripts/machine.py says?" % machine.FT_MACE_RUN_TRAIN)
     missing, n_train = check_e0s(paths["train_file"])
     if missing:
         sys.exit("no IsolatedAtom E0 in train.extxyz for %s -- run dft/04 and then "
@@ -148,10 +141,9 @@ def main():
             handle.write("%s: %s\n" % (key, yaml_value(value)))
     with open(os.path.join(folder, layout.JOB_SCRIPT), "w") as handle:
         handle.write(JOB_TEMPLATE.format(
-            name=fs.FT_NAME, account=fs.FT_SLURM_ACCOUNT,
-            partition=fs.FT_SLURM_PARTITION, cpus=fs.FT_SLURM_CPUS,
-            memory=fs.FT_SLURM_MEMORY, time=fs.FT_SLURM_TIME, err=layout.JOB_ERR,
-            trainer=fs.FT_MACE_RUN_TRAIN, config=CONFIG))
+            header=machine.sbatch_header(fs.FT_SLURM_CPUS, fs.FT_SLURM_MEMORY,
+                                         fs.FT_SLURM_TIME, name=fs.FT_NAME, gpu=True),
+            cpus=fs.FT_SLURM_CPUS, trainer=machine.FT_MACE_RUN_TRAIN, config=CONFIG))
 
     print("training data  %s  (%d configs + E0s)" % (data_dir, n_train))
     print("foundation     %s" % fs.FT_FOUNDATION)

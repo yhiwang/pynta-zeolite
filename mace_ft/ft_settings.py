@@ -13,10 +13,6 @@ FT_FOUNDATION = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
                              "models", "mace-mpa-0-medium.model")
 FT_SUBMIT = True               # False: write config.yaml + job.sh only (dry run)
 
-# the mace-ft env's trainer, called directly (conda activate fails silently
-# in batch jobs)
-FT_MACE_RUN_TRAIN = os.path.expanduser("~/.conda/envs/mace-ft/bin/mace_run_train")
-
 # loss weights: stage one, then stage two (lower learning rate, more energy)
 FT_ENERGY_WEIGHT = 1.0
 FT_FORCES_WEIGHT = 10.0
@@ -32,8 +28,6 @@ FT_DTYPE = "float32"            # float64 is MACE's default, but these GPUs are 
                                 # in double precision; float32 is fine for training
 FT_SEED = 123
 
-FT_SLURM_ACCOUNT = "ark245grp"
-FT_SLURM_PARTITION = "gpu-6000-blackwell"
 FT_SLURM_CPUS = 8
 FT_SLURM_MEMORY = "64G"
 FT_SLURM_TIME = "24:00:00"
