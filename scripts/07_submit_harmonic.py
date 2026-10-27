@@ -42,6 +42,7 @@ import sys
 
 import _common  # noqa: F401
 import layout
+import machine
 import settings
 from ase.io import read
 from pyntaz.reactions import molecule_from_adjlist
@@ -51,16 +52,7 @@ from pyntaz.harmonic_relax import check_atom_order, guess_bond_indices
 WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "harmonic_one.py")
 
 JOB_TEMPLATE = """#!/bin/bash
-#SBATCH --job-name=%(name)s
-#SBATCH --account=%(account)s
-#SBATCH --partition=%(partition)s
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=%(cores)d
-#SBATCH --mem=%(memory)s
-#SBATCH --time=%(time)s
-#SBATCH --output=job.out
-#SBATCH --error=job.err
+%(header)s
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
@@ -74,20 +66,17 @@ export PYTHONPATH=%(repo)s:$PYTHONPATH
 def job_script(name, xyz_name, state):
     """Text of job.sh for one guess and state; ``xyz_name`` is relative to
     the job directory."""
-    return JOB_TEMPLATE % {"name": name,
-                           "account": settings.SLURM_ACCOUNT,
-                           "partition": settings.SLURM_PARTITION,
-                           "cores": settings.TS_HARMONIC_SLURM_CORES,
-                           "memory": settings.SLURM_MEMORY,
-                           "time": settings.TS_HARMONIC_SLURM_TIME,
-                           "repo": _common.REPO, "python": settings.PYTHON,
+    return JOB_TEMPLATE % {"header": machine.sbatch_header(settings.TS_HARMONIC_SLURM_CORES,
+                                                     settings.SLURM_MEMORY,
+                                                     settings.TS_HARMONIC_SLURM_TIME, name=name),
+                           "repo": _common.REPO, "python": machine.PYTHON,
                            "worker": WORKER, "xyz": xyz_name, "state": state}
 
 
 def missing_machine_paths():
     """[(name, path)] of the settings paths that do not exist."""
     return [(name, path) for name, path in
-            (("PYTHON", settings.PYTHON), ("MACE_MODEL", settings.MACE_MODEL),
+            (("PYTHON", machine.PYTHON), ("MACE_MODEL", settings.MACE_MODEL),
              ("WORKER", WORKER))
             if not os.path.exists(path)]
 

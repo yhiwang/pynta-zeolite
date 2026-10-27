@@ -12,6 +12,12 @@ import os
 from _common import REPO
 
 # --------------------------------------------------------------------------
+# the machine: the name of a block in scripts/machine.py
+# --------------------------------------------------------------------------
+
+MACHINE = "hive"
+
+# --------------------------------------------------------------------------
 # the run
 # --------------------------------------------------------------------------
 
@@ -58,9 +64,6 @@ SKIP = ()                       # species names to leave out
 RELAX_FMAX = 0.05               # eV/A
 RELAX_MAX_STEPS = 100
 
-# the conda env python directly -- `conda activate` fails silently in batch jobs
-PYTHON = os.environ.get(
-    "PYNTAZ_PYTHON", os.path.expanduser("~/.conda/envs/pyntaz-slim/bin/python"))
 # a model *file*: a bare model name makes MACE try to download it, which
 # fails on a compute node without internet
 # MACE_MODEL = os.environ.get(
@@ -71,8 +74,6 @@ PYTHON = os.environ.get(
 MACE_MODEL = os.environ.get(
     "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa0-ft-MOR_T4-round2-e1f10.model"))
 
-SLURM_ACCOUNT = os.environ.get("PYNTAZ_SLURM_ACCOUNT", "ark245grp")
-SLURM_PARTITION = os.environ.get("PYNTAZ_SLURM_PARTITION", "high")
 SLURM_CORES = 4
 SLURM_MEMORY = "16G"
 SLURM_TIME = "04:00:00"

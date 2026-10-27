@@ -32,22 +32,14 @@ import sys
 
 import _common  # noqa: F401
 import layout
+import machine
 import settings
 
 WORKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ts_sella_one.py")
 STARTS = ("harmonic", "raw")
 
 JOB_TEMPLATE = """#!/bin/bash
-#SBATCH --job-name=%(name)s
-#SBATCH --account=%(account)s
-#SBATCH --partition=%(partition)s
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=%(cores)d
-#SBATCH --mem=%(memory)s
-#SBATCH --time=%(time)s
-#SBATCH --output=job.out
-#SBATCH --error=job.err
+%(header)s
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
@@ -61,13 +53,10 @@ export PYTHONPATH=%(repo)s:$PYTHONPATH
 def job_script(name):
     """Text of job.sh for one start; the worker reads start.xyz from the
     job directory."""
-    return JOB_TEMPLATE % {"name": name,
-                           "account": settings.SLURM_ACCOUNT,
-                           "partition": settings.SLURM_PARTITION,
-                           "cores": settings.TS_SELLA_SLURM_CORES,
-                           "memory": settings.SLURM_MEMORY,
-                           "time": settings.TS_SELLA_SLURM_TIME,
-                           "repo": _common.REPO, "python": settings.PYTHON,
+    return JOB_TEMPLATE % {"header": machine.sbatch_header(settings.TS_SELLA_SLURM_CORES,
+                                                     settings.SLURM_MEMORY,
+                                                     settings.TS_SELLA_SLURM_TIME, name=name),
+                           "repo": _common.REPO, "python": machine.PYTHON,
                            "worker": WORKER, "xyz": layout.TS_START}
 
 
@@ -81,7 +70,7 @@ def start_file(config_dir, start):
 def missing_machine_paths():
     """[(name, path)] of the settings paths that do not exist."""
     return [(name, path) for name, path in
-            (("PYTHON", settings.PYTHON), ("MACE_MODEL", settings.MACE_MODEL),
+            (("PYTHON", machine.PYTHON), ("MACE_MODEL", settings.MACE_MODEL),
              ("WORKER", WORKER))
             if not os.path.exists(path)]
 

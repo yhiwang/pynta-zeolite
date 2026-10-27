@@ -50,6 +50,7 @@ from collections import Counter, defaultdict
 
 import _common  # noqa: F401
 import layout
+import machine
 import settings
 
 sys.path.insert(0, os.path.join(_common.REPO, "dft"))
@@ -95,7 +96,7 @@ def check_setup():
     if missing:
         sys.exit("missing: %s\nadd them first (see the docstring of dft_sella_one.py "
                  "and this script)" % ", ".join(missing))
-    for name, path in (("PYTHON", settings.PYTHON), ("WORKER", WORKER),
+    for name, path in (("PYTHON", machine.PYTHON), ("WORKER", WORKER),
                        ("VASP_PP_PATH/potpaw_PBE",
                         os.path.join(ds.VASP_PP_PATH, "potpaw_PBE"))):
         if not os.path.exists(path):
@@ -126,7 +127,7 @@ def job_script(name, lane=None):
                            "time": settings.DFT_SELLA_SLURM_TIME,
                            "module": ds.VASP_MODULE, "binary": ds.VASP_BINARY,
                            "pp": ds.VASP_PP_PATH, "repo": _common.REPO,
-                           "python": settings.PYTHON, "worker": WORKER,
+                           "python": machine.PYTHON, "worker": WORKER,
                            "start": layout.TS_START}
 
 
