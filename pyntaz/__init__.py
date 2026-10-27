@@ -20,6 +20,7 @@ Module map, in workflow order:
     ts_graph     TSGraph + PairSweep: TS guesses from the reaction graph (step 5)
     harmonic_relax  staged spring pre-relax of one TS guess with MACE (step 7)
     ts_sella     Sella saddle search + frequency check of one TS start  (step 8)
+    connectivity structure vs adjacency list: check a map, find the maps (any step)
 
 Every numeric default lives next to the function that uses it, as a
 keyword argument; the step scripts pass their own values from
