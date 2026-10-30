@@ -37,14 +37,15 @@ MACE one (adsorbate RMSD, largest displacement of any free atom); every
 reacting bond at the MACE TS and the DFT TS.
 
 "converged" means every free atom is below DFT_SELLA_FMAX at a point Sella
-treats as a first-order saddle. It is not yet a checked TS: step 13's
-quasi-IRC is what shows it joins the intended initial and final states.
+treats as a first-order saddle. It is not yet a checked TS: step 14
+counts its imaginary modes, and step 15's quasi-IRC shows it joins the
+intended initial and final states.
 
 The search itself is step 8's pyntaz.ts_sella.saddle_search, only with VASP
 as the calculator and the band's free atoms; what this file adds is what a
 days-long DFT search needs and a minutes-long MACE one does not: resuming,
 and no frequency check (finite differences on ~100 free atoms would be ~600
-DFT single points; step 13 checks the TS by its quasi-IRC instead).
+DFT single points; step 14 runs one on the adsorbate and the site only).
 
 Needs ase, sella and numpy (no MACE); job.sh loads the VASP module and sets
 ASE_VASP_COMMAND and VASP_PP_PATH.

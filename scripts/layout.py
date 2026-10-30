@@ -93,6 +93,11 @@ DFT_SELLA_DIR = "dft_sella"            # DFT_TS/.../<stem>/dft_sella/: the step 
 DFT_SELLA_STRUCTURE = "ts_dft.xyz"     # DFT_TS/.../<stem>/dft_sella/: where Sella stopped, DFT energy + forces
 DFT_SELLA_VASP = "vasp"                # DFT_TS/.../<stem>/dft_sella/vasp/: VASP's files, WAVECAR between steps
 DFT_SELLA_PROGRESS = "progress.json"   # DFT_TS/.../<stem>/dft_sella/: steps so far + last accepted geometry
+QUASI_IRC_DIR = "quasi_irc"           # DFT_TS/.../<stem>/quasi_irc/: start.xyz + ts_info.json (step 13); steps 14-15 run in its subfolders
+DFT_VIB_DIR = "vib"                   # DFT_TS/.../<stem>/quasi_irc/vib/: the step 14 job runs here
+DFT_VIB_CACHE = "displacements"       # quasi_irc/vib/displacements/: ASE's forces, one file per displacement (kept for --resume)
+DFT_VIB_VASP = "vasp"                 # quasi_irc/vib/vasp/: VASP's files, WAVECAR between displacements
+DFT_VIB_MODE = "mode.xyz"             # quasi_irc/vib/: start.xyz + the first mode as the per-atom array "mode" (step 15)
 
 
 class RunLayout:

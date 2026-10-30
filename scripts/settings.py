@@ -221,3 +221,23 @@ DFT_SELLA_VASP_CHANGES = dict(lwave=True)   # on top of SP_VASP: reuse WAVECAR e
 DFT_SELLA_KEEP_WAVECAR = False  # delete WAVECAR and other bulky VASP files once converged
 DFT_SELLA_LANES = 8             # at most this many running at once (None: no limit)
 DFT_SELLA_SLURM_TIME = "24:00:00"   # a job that runs out continues with --resume
+
+# --------------------------------------------------------------------------
+# step 13: collect the converged DFT Sella TSs into quasi_irc/ (login node,
+# submits nothing; no settings)
+# step 14: DFT vibrations at those TSs: the adsorbate, the site Al, its four O
+# and their four Si vibrate (one SLURM job per TS; module, POTCARs, account,
+# partition, cores and memory as in step 12)
+# --------------------------------------------------------------------------
+
+DFT_VIB_DELTA = 0.015           # A, finite-difference step (VASP's POTIM default for IBRION=5/6)
+DFT_VIB_IMAG_CUTOFF = TS_SELLA_IMAG_CUTOFF   # cm-1, smaller imaginary modes count as noise
+DFT_VIB_VASP_CHANGES = dict(    # on top of SP_VASP, for accurate forces:
+    prec="Accurate",
+    ediff=1e-8,
+    lreal=False,
+    lwave=True,                 # each displacement starts from the last WAVECAR
+)
+DFT_VIB_KEEP_WAVECAR = False    # delete WAVECAR and other bulky VASP files once finished
+DFT_VIB_LANES = 8               # at most this many running at once (None: no limit)
+DFT_VIB_SLURM_TIME = "24:00:00"   # a job that runs out continues with --resume

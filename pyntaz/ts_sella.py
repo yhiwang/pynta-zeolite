@@ -88,27 +88,42 @@ def bond_stretches(atoms, mode, bonds):
     return out
 
 
-def frequency_check(atoms, free, bonds, name, delta=VIB_DELTA, imag_cutoff=IMAG_CUTOFF):
+def frequency_check(atoms, free, bonds, name, delta=VIB_DELTA, imag_cutoff=IMAG_CUTOFF,
+                    resume=False):
     """Finite-difference frequencies of the ``free`` atoms at the current
     geometry (``atoms`` must carry its calculator). ``name`` is the vibration
     cache directory; it is deleted first, because ASE reuses cached
-    displacements and stale ones give wrong modes. Writes the first mode as
+    displacements and stale ones give wrong modes. With ``resume`` the cache
+    of an earlier run on the same geometry is kept instead, and only the
+    empty files of displacements that never finished are removed (step 14:
+    a DFT job that ran out of time). Writes the first mode as
     ``<name>.0.traj`` for ase gui.
 
     Returns a dict: ``imaginary`` (cm-1, the ones above ``imag_cutoff``,
-    largest first) and ``stretches`` (:func:`bond_stretches` of the first
-    mode, or None when there is no imaginary mode).
+    largest first), ``stretches`` (:func:`bond_stretches` of the first
+    mode, or None when there is no imaginary mode), ``frequencies`` (cm-1,
+    every mode, lowest eigenvalue first, imaginary ones negative) and
+    ``mode`` (natoms x 3, the first mode, zero on atoms that do not vibrate).
     """
     from ase.vibrations import Vibrations
 
-    shutil.rmtree(name, ignore_errors=True)
-    vib = Vibrations(atoms, indices=list(free), name=name, delta=delta)
+    if not resume:
+        shutil.rmtree(name, ignore_errors=True)
+    # sorted: ASE puts the modes back on the atoms in ascending order
+    vib = Vibrations(atoms, indices=sorted(free), name=name, delta=delta)
+    if resume:
+        vib.clean(empty_files=True)
     vib.run()
-    imaginary = sorted((float(f.imag) for f in vib.get_frequencies() if f.imag > imag_cutoff),
+    frequencies = vib.get_frequencies()
+    imaginary = sorted((float(f.imag) for f in frequencies if f.imag > imag_cutoff),
                        reverse=True)
     vib.write_mode(0)
-    stretches = bond_stretches(atoms, vib.get_mode(0), bonds) if imaginary else None
-    return {"imaginary": imaginary, "stretches": stretches}
+    mode = vib.get_mode(0)
+    stretches = bond_stretches(atoms, mode, bonds) if imaginary else None
+    return {"imaginary": imaginary, "stretches": stretches,
+            "frequencies": [-float(f.imag) if f.imag > 0 else float(f.real)
+                            for f in frequencies],
+            "mode": mode}
 
 
 def verdict(search, check, mode_min=MODE_MIN):
