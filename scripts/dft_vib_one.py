@@ -17,7 +17,6 @@ Vibrating atoms (every other atom stays where it is):
     the adsorbate    index >= n_framework (ts_info.json)
     the site Al      ts_info.json site.al; it must list exactly one Al
     its four O       the four framework O nearest that Al (minimum image)
-    their four Si    the framework Si nearest each of those O
 
 Every single point must reach EDIFF. When VASP stops at NELM first, the job
 stops with an error before that displacement goes into the cache: raise nelm
@@ -25,7 +24,9 @@ in DFT_VIB_VASP_CHANGES and rerun step 14 with --resume.
 
 Resuming: a job stopped by the time limit (or by the check above) keeps every
 finished displacement in displacements/; step 14 --resume continues with the
-rest (the empty file of the unfinished one is removed first). The cache is
+rest (the empty file of the unfinished one is removed first). After a failure
+job.sh deletes the big VASP files (layout.DFT_VIB_BULKY), so the resumed job
+starts without a WAVECAR; after a time-out they stay. The cache is
 only valid for this start.xyz: to redo a finished vibration (other
 settings), delete the whole vib/ folder.
 
@@ -61,10 +62,6 @@ from pyntaz.ts_sella import frequency_check
 sys.path.insert(0, os.path.join(_common.REPO, "dft"))
 import dft_settings as ds  # noqa: E402
 
-BULKY = ("WAVECAR", "CHG", "CHGCAR", "vasprun.xml", "vaspout.h5", "DOSCAR",
-         "EIGENVAL", "PROCAR", "XDATCAR", "PCDAT")   # removed from vasp/ once finished
-
-
 def load_json(path):
     with open(path) as handle:
         return json.load(handle)
@@ -99,7 +96,7 @@ def nearest(atoms, i, candidates, n):
 
 
 def vibrating_atoms(atoms, info):
-    """{"adsorbate", "al", "oxygens", "silicons"}; prints the site atoms."""
+    """{"adsorbate", "al", "oxygens"}; prints the site atoms."""
     n_framework = info["atoms"]["n_framework"]
     al = info["site"]["al"]
     if len(al) != 1:
@@ -108,20 +105,9 @@ def vibrating_atoms(atoms, info):
     al = al[0]
     oxygens, d_o = nearest(atoms, al, [i for i in range(n_framework)
                                        if atoms[i].symbol == "O"], 4)
-    framework_si = [i for i in range(n_framework) if atoms[i].symbol == "Si"]
-    silicons, d_si = [], []
-    for o in oxygens:
-        si, d = nearest(atoms, o, framework_si, 1)
-        silicons += si
-        d_si += d
     print("Al %d  ->  %s" % (al, "   ".join("O %d %.3f" % od for od in zip(oxygens, d_o))))
-    print("O   ->  %s" % "   ".join("O %d: Si %d %.3f" % osd
-                                    for osd in zip(oxygens, silicons, d_si)))
-    if len(set(silicons)) != 4:
-        sys.exit("two O of Al %d share their nearest Si (%s): check the site"
-                 % (al, silicons))
     return {"adsorbate": list(range(n_framework, len(atoms))), "al": al,
-            "oxygens": oxygens, "silicons": silicons}
+            "oxygens": oxygens}
 
 
 def main(start_path):
@@ -134,9 +120,9 @@ def main(start_path):
     atoms = read(start_path)
     print("%s   %s" % (info["id"], info["where"]["reaction"]))
     sets = vibrating_atoms(atoms, info)
-    indices = sets["adsorbate"] + [sets["al"]] + sets["oxygens"] + sets["silicons"]
+    indices = sets["adsorbate"] + [sets["al"]] + sets["oxygens"]
     cache = os.path.join(out_dir, layout.DFT_VIB_CACHE)
-    print("vibrating: %d adsorbate atoms + Al + 4 O + 4 Si = %d atoms, %d single points; %s"
+    print("vibrating: %d adsorbate atoms + Al + 4 O = %d atoms, %d single points; %s"
           % (len(sets["adsorbate"]), len(indices), 6 * len(indices) + 1,
              "resuming" if os.path.isdir(cache) else "new"))
 
@@ -162,7 +148,7 @@ def main(start_path):
     write(os.path.join(out_dir, layout.DFT_VIB_MODE), ts, format="extxyz")
 
     if not settings.DFT_VIB_KEEP_WAVECAR:
-        for name in BULKY:
+        for name in layout.DFT_VIB_BULKY:
             path = os.path.join(out_dir, layout.DFT_VIB_VASP, name)
             if os.path.isfile(path):
                 os.remove(path)

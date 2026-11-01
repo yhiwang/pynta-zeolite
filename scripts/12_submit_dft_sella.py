@@ -67,6 +67,7 @@ REQUIRED_LAYOUT = ("DFT_SELLA_DIR", "DFT_SELLA_STRUCTURE", "DFT_SELLA_VASP",
 
 JOB_TEMPLATE = """#!/bin/bash
 %(header)s
+#SBATCH --no-requeue
 %(dependency)s
 %(setup)s
 export OMP_NUM_THREADS=1

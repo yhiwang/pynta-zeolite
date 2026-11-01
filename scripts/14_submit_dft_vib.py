@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Step 14 -- one DFT vibration job per TS that step 13 collected: the
-adsorbate, the site Al, its four O and their four Si vibrate (see
-scripts/dft_vib_one.py).
+adsorbate, the site Al and its four O vibrate (see scripts/dft_vib_one.py).
 
     python scripts/14_submit_dft_vib.py            # submit new ones, report the rest
     python scripts/14_submit_dft_vib.py --resume   # ... and resubmit the stopped ones
@@ -20,8 +19,9 @@ Every collected TS reports one of:
 
     done          result.json written (verdict, frequencies)
     in the queue  job.id present, the job is in squeue
-    stopped       job.id present, job gone, no result.json: the time limit, or
-                  a single point that did not reach EDIFF (look at job.err)
+    stopped       job.id present, job gone, no result.json: the time limit, a
+                  single point that did not reach EDIFF, or a node failure
+                  (look at job.err and sacct)
                   -> --resume submits it again and it continues from the
                      displacements it finished
     submitted     new, sbatch accepted it (would submit: settings.SUBMIT = False)
@@ -29,9 +29,14 @@ Every collected TS reports one of:
 VASP settings, binary, ranks and memory come from dft/dft_settings.py (SP_VASP
 + DFT_VIB_VASP_CHANGES), and the module, launch, POTCARs, account and
 partition from scripts/machine.py, as in step 12. Disk: each running job
-keeps a WAVECAR in vasp/ until it finishes, so with DFT_VIB_LANES = N the
-jobs share N names and carry --dependency=singleton: all can be queued at
-once while at most N run (None: no limit).
+keeps a WAVECAR in vasp/. job.sh deletes the big VASP files
+(layout.DFT_VIB_BULKY) after every exit, finished or failed, unless
+DFT_VIB_KEEP_WAVECAR; a job killed at the time limit keeps them for --resume.
+With DFT_VIB_LANES = N the jobs share N names and carry
+--dependency=singleton: all can be queued at once while at most N run (None:
+no limit). Jobs carry --no-requeue: after a node failure SLURM does not start
+a job again by itself (the first copy can still be running in the same
+folder); --resume submits it again.
 
 settings.SUBMIT = False writes everything but submits nothing (dry run).
 Each job runs scripts/dft_vib_one.py from this checkout, so keep it where it
@@ -58,10 +63,11 @@ RESUME_FLAG = "--resume"
 REQUIRED_SETTINGS = ("DFT_VIB_DELTA", "DFT_VIB_IMAG_CUTOFF", "DFT_VIB_VASP_CHANGES",
                      "DFT_VIB_KEEP_WAVECAR", "DFT_VIB_LANES", "DFT_VIB_SLURM_TIME")
 REQUIRED_LAYOUT = ("QUASI_IRC_DIR", "DFT_VIB_DIR", "DFT_VIB_CACHE", "DFT_VIB_VASP",
-                   "DFT_VIB_MODE", "TS_COLLECT_CSV", "TS_COLLECT_INFO")
+                   "DFT_VIB_MODE", "DFT_VIB_BULKY", "TS_COLLECT_CSV", "TS_COLLECT_INFO")
 
 JOB_TEMPLATE = """#!/bin/bash
 %(header)s
+#SBATCH --no-requeue
 %(dependency)s
 %(setup)s
 export OMP_NUM_THREADS=1
@@ -73,6 +79,9 @@ cd "$SLURM_SUBMIT_DIR"
 
 # the env python directly: `conda activate` fails silently in batch jobs
 %(python)s %(worker)s %(start)s
+status=$?
+%(cleanup)s
+exit $status
 """
 
 
@@ -101,7 +110,8 @@ def parse_args(argv):
 def job_script(name, lane=None):
     """With a ``lane`` the job is named dv_lane<NN> and waits for the previous
     job of that name (--dependency=singleton): at most DFT_VIB_LANES run at
-    once, which caps the WAVECARs on disk."""
+    once. Unless DFT_VIB_KEEP_WAVECAR, the job deletes the big VASP files when
+    the worker exits, finished or failed."""
     if lane is not None:
         name = "dv_lane%02d" % lane
     return JOB_TEMPLATE % {"header": machine.sbatch_header(
@@ -114,7 +124,11 @@ def job_script(name, lane=None):
                            "launch": machine.VASP_LAUNCH, "binary": ds.VASP_BINARY,
                            "pp": machine.VASP_PP_PATH, "repo": _common.REPO,
                            "python": machine.PYTHON, "worker": WORKER,
-                           "start": os.path.join(os.pardir, layout.TS_START)}
+                           "start": os.path.join(os.pardir, layout.TS_START),
+                           "cleanup": "" if settings.DFT_VIB_KEEP_WAVECAR else
+                           "# the big VASP files, after every exit\nrm -f %s" % " ".join(
+                               os.path.join(layout.DFT_VIB_VASP, n)
+                               for n in layout.DFT_VIB_BULKY)}
 
 
 def job_name(row):

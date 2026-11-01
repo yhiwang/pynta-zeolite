@@ -98,6 +98,9 @@ DFT_VIB_DIR = "vib"                   # DFT_TS/.../<stem>/quasi_irc/vib/: the st
 DFT_VIB_CACHE = "displacements"       # quasi_irc/vib/displacements/: ASE's forces, one file per displacement (kept for --resume)
 DFT_VIB_VASP = "vasp"                 # quasi_irc/vib/vasp/: VASP's files, WAVECAR between displacements
 DFT_VIB_MODE = "mode.xyz"             # quasi_irc/vib/: start.xyz + the first mode as the per-atom array "mode" (step 15)
+DFT_VIB_BULKY = ("WAVECAR", "CHG", "CHGCAR", "vasprun.xml", "vaspout.h5", "DOSCAR",
+                 "EIGENVAL", "PROCAR", "XDATCAR", "PCDAT")   # quasi_irc/vib/vasp/: the big VASP files,
+                                       # deleted after every job unless settings.DFT_VIB_KEEP_WAVECAR
 
 
 class RunLayout:

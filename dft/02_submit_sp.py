@@ -65,6 +65,7 @@ STALE_OUTPUTS = ("OUTCAR", "OSZICAR", "CONTCAR", "vasprun.xml", "vaspout.h5",
 # dft/04 formats this template with its own fields, so it can take no new ones
 JOB_TEMPLATE = """#!/bin/bash
 {header}
+#SBATCH --no-requeue
 {dependency}
 {setup}
 export OMP_NUM_THREADS=1
