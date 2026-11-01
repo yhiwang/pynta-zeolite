@@ -15,11 +15,19 @@ final model all land there:
     logs/, results/, checkpoints/
 
 Multihead replay fine-tuning: the training data becomes its own head, and
-FT_NUM_SAMPLES_PT Materials Project structures are replayed alongside so
-the model keeps its general chemistry. ``pt_train_file: mp`` must be set
-explicitly -- with a foundation model given as a *file*, MACE otherwise
-falls back to naive fine-tuning with only a warning. The MP file is read
-from ~/.cache/mace/ (download it once on the login node).
+Materials Project structures are replayed alongside so the model keeps its
+general chemistry. ``pt_train_file: mp`` must be set explicitly -- with a
+foundation model given as a *file*, MACE otherwise falls back to naive
+fine-tuning with only a warning. The MP file is read from ~/.cache/mace/
+(download it once on the login node).
+
+The replay keeps only the MP configs that pass FT_FILTER_TYPE_PT for
+FT_ATOMIC_NUMBERS (MACE's filter_atoms rules). mace_run_train has no "keep
+all" value for num_samples_pt, so this script counts the passing configs
+in the MP file and writes that count (or FT_NUM_SAMPLES_PT, capped at the
+count when padding is off). With FT_PSEUDOLABEL_REPLAY the replay labels
+come from the foundation model -- needed for a non-MP foundation such as
+OMAT-0, because MACE loads the MP file for every pt_train_file name.
 
 E0s come from the config_type=IsolatedAtom structures in train.extxyz (dft
 step 4 + step 3); the script stops if any element in the data lacks one.
@@ -37,6 +45,7 @@ import ft_settings as fs
 import layout
 import machine
 import settings
+from ase.data import chemical_symbols
 from ase.io import read
 
 TRAINING_DIR = "training"                  # DFT_sp/, written by dft step 3
@@ -67,6 +76,35 @@ def check_e0s(train_path):
     return sorted(needed - with_e0), len(configs) - len(with_e0)
 
 
+def passes(symbols, elements, filter_type):
+    """MACE's filter_atoms rule for one config (symbols, elements: sets)."""
+    if filter_type == "none":
+        return True
+    if filter_type == "combinations":       # only listed elements, not all needed
+        return symbols <= elements
+    if filter_type == "exclusive":          # exactly the listed elements
+        return symbols == elements
+    return elements <= symbols              # inclusive: all listed, others allowed
+
+
+def count_replay(path, filter_type, elements):
+    """(configs that pass, all configs) in the MP replay file. Reads only the
+    species column, so it stops if a frame does not start with it."""
+    n_pass = n_all = 0
+    with open(path) as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            n_atoms = int(line)
+            if "Properties=species:S:1" not in next(handle):
+                sys.exit("%s frame %d: species is not the first column -- cannot "
+                         "count the replay" % (path, n_all + 1))
+            symbols = {next(handle).split(None, 1)[0] for _ in range(n_atoms)}
+            n_all += 1
+            n_pass += passes(symbols, elements, filter_type)
+    return n_pass, n_all
+
+
 def yaml_value(value):
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -95,6 +133,18 @@ def main():
         sys.exit("no IsolatedAtom E0 in train.extxyz for %s -- run dft/04 and then "
                  "dft/03 again" % ", ".join(missing))
 
+    if fs.FT_FILTER_TYPE_PT not in ("none", "combinations", "exclusive", "inclusive"):
+        sys.exit("FT_FILTER_TYPE_PT must be none, combinations, exclusive or inclusive")
+    elements = {chemical_symbols[z] for z in fs.FT_ATOMIC_NUMBERS}
+    n_pass, n_all = count_replay(REPLAY_CACHE, fs.FT_FILTER_TYPE_PT, elements)
+    if n_pass == 0:
+        sys.exit("no MP replay config passes filter %s %s -- check FT_ATOMIC_NUMBERS"
+                 % (fs.FT_FILTER_TYPE_PT, fs.FT_ATOMIC_NUMBERS))
+    n_replay = n_pass if fs.FT_NUM_SAMPLES_PT is None else fs.FT_NUM_SAMPLES_PT
+    capped = n_replay > n_pass and not fs.FT_PADDING_PT   # MACE would stop in the job
+    if capped:
+        n_replay = n_pass
+
     folder = os.path.abspath(os.path.join(settings.RUN_DIR, FT_DIR, fs.FT_NAME))
     id_path = os.path.join(folder, layout.JOB_ID)
     if os.path.isfile(id_path):
@@ -108,7 +158,11 @@ def main():
         "foundation_model": os.path.abspath(fs.FT_FOUNDATION),
         "multiheads_finetuning": True,
         "pt_train_file": "mp",
-        "num_samples_pt": fs.FT_NUM_SAMPLES_PT,
+        "num_samples_pt": n_replay,
+        "pseudolabel_replay": fs.FT_PSEUDOLABEL_REPLAY,
+        "filter_type_pt": fs.FT_FILTER_TYPE_PT,
+        "atomic_numbers": str(fs.FT_ATOMIC_NUMBERS),   # a string: MACE refuses a yaml list here
+        "disallow_random_padding_pt": not fs.FT_PADDING_PT,
         **paths,
         "energy_key": "REF_energy",
         "forces_key": "REF_forces",
@@ -147,6 +201,11 @@ def main():
 
     print("training data  %s  (%d configs + E0s)" % (data_dir, n_train))
     print("foundation     %s" % fs.FT_FOUNDATION)
+    print("replay         %d of %d MP configs pass %s %s; using %d%s, padding %s, "
+          "pseudolabels %s"
+          % (n_pass, n_all, fs.FT_FILTER_TYPE_PT, fs.FT_ATOMIC_NUMBERS, n_replay,
+             " (FT_NUM_SAMPLES_PT = %d capped)" % fs.FT_NUM_SAMPLES_PT if capped else "",
+             fs.FT_PADDING_PT, fs.FT_PSEUDOLABEL_REPLAY))
     print("weights        E:F = %g:%g, stage two from epoch %s at %g:%g"
           % (fs.FT_ENERGY_WEIGHT, fs.FT_FORCES_WEIGHT, fs.FT_STAGE_TWO_START,
              fs.FT_STAGE_TWO_ENERGY_WEIGHT, fs.FT_STAGE_TWO_FORCES_WEIGHT)

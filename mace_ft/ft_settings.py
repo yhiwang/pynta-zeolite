@@ -7,10 +7,10 @@ import os
 
 import settings                 # the mace_ft scripts put scripts/ on sys.path first
 
-FT_NAME = "ft_%s_e1f10" % settings.ROUND   # folder <RUN_DIR>/MACE_ft/<FT_NAME>/
+FT_NAME = "ft_round2_omat0_e1f10"   # folder <RUN_DIR>/MACE_ft/<FT_NAME>/; data = rounds 1+2
 # always start from the original foundation model, not the pipeline's model
 FT_FOUNDATION = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                             "models", "mace-mpa-0-medium.model")
+                             "models", "mace-omat-0-medium.model")
 FT_SUBMIT = True               # False: write config.yaml + job.sh only (dry run)
 
 # loss weights: stage one, then stage two (lower learning rate, more energy)
@@ -20,10 +20,16 @@ FT_STAGE_TWO = False
 FT_STAGE_TWO_ENERGY_WEIGHT = 10.0
 FT_STAGE_TWO_FORCES_WEIGHT = 10.0
 
-FT_EPOCHS = 50                  # each epoch also replays FT_NUM_SAMPLES_PT MP structures
+FT_EPOCHS = 40                  # each epoch also replays the MP structures
 FT_STAGE_TWO_START = 40         # epoch at which stage two starts
 FT_BATCH_SIZE = 4
-FT_NUM_SAMPLES_PT = 10000       # MP replay structures (fewer = faster epochs)
+FT_NUM_SAMPLES_PT = None        # MP replay size: None = every config that passes the filter;
+                                # a number = that many (capped at the count when padding is off)
+FT_PSEUDOLABEL_REPLAY = True    # relabel the replay with the foundation model
+FT_FILTER_TYPE_PT = "combinations"     # none, combinations (only these elements),
+                                       # exclusive (exactly these), inclusive (all of these + others)
+FT_ATOMIC_NUMBERS = [1, 6, 8, 13, 14]  # H, C, O, Al, Si
+FT_PADDING_PT = False           # False: never fill the replay with configs that fail the filter
 FT_DTYPE = "float32"            # float64 is MACE's default, but these GPUs are slow
                                 # in double precision; float32 is fine for training
 FT_SEED = 123
