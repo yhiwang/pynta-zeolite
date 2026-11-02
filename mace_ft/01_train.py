@@ -15,11 +15,13 @@ final model all land there:
     logs/, results/, checkpoints/
 
 Multihead replay fine-tuning: the training data becomes its own head, and
-Materials Project structures are replayed alongside so the model keeps its
-general chemistry. ``pt_train_file: mp`` must be set explicitly -- with a
-foundation model given as a *file*, MACE otherwise falls back to naive
-fine-tuning with only a warning. The MP file is read from ~/.cache/mace/
-(download it once on the login node).
+replay structures are trained alongside so the model keeps its general
+chemistry. pt_train_file must be set explicitly -- with a foundation model
+given as a *file*, MACE otherwise falls back to naive fine-tuning with only
+a warning. FT_REPLAY = "mp" uses MACE's MP file, read from ~/.cache/mace/
+(download it once on the login node). FT_REPLAY = a path uses that file:
+MACE reads it whole (no filter, no sampling, its own 10% validation split),
+so it must be filtered and sized before and use REF_energy / REF_forces.
 
 The replay keeps only the MP configs that pass FT_FILTER_TYPE_PT for
 FT_ATOMIC_NUMBERS (MACE's filter_atoms rules). mace_run_train has no "keep
@@ -88,7 +90,7 @@ def passes(symbols, elements, filter_type):
 
 
 def count_replay(path, filter_type, elements):
-    """(configs that pass, all configs) in the MP replay file. Reads only the
+    """(configs that pass, all configs) in a replay file. Reads only the
     species column, so it stops if a frame does not start with it."""
     n_pass = n_all = 0
     with open(path) as handle:
@@ -120,9 +122,13 @@ def main():
     for path in paths.values():
         if not os.path.isfile(path):
             sys.exit("%s not found -- run dft/03_build_training_set.py first" % path)
-    if not os.path.isfile(REPLAY_CACHE):
-        sys.exit("replay data %s not found -- download it on the login node first"
-                 % REPLAY_CACHE)
+    if fs.FT_REPLAY == "mp":
+        replay = REPLAY_CACHE
+    else:
+        replay = os.path.abspath(fs.FT_REPLAY)
+    if not os.path.isfile(replay):
+        sys.exit("replay data %s not found -- download it on the login node, or check "
+                 "FT_REPLAY in mace_ft/ft_settings.py" % replay)
     if not os.path.isfile(fs.FT_FOUNDATION):
         sys.exit("foundation model %s not found" % fs.FT_FOUNDATION)
     if not os.access(machine.FT_MACE_RUN_TRAIN, os.X_OK):
@@ -136,14 +142,17 @@ def main():
     if fs.FT_FILTER_TYPE_PT not in ("none", "combinations", "exclusive", "inclusive"):
         sys.exit("FT_FILTER_TYPE_PT must be none, combinations, exclusive or inclusive")
     elements = {chemical_symbols[z] for z in fs.FT_ATOMIC_NUMBERS}
-    n_pass, n_all = count_replay(REPLAY_CACHE, fs.FT_FILTER_TYPE_PT, elements)
+    n_pass, n_all = count_replay(replay, fs.FT_FILTER_TYPE_PT, elements)
     if n_pass == 0:
-        sys.exit("no MP replay config passes filter %s %s -- check FT_ATOMIC_NUMBERS"
-                 % (fs.FT_FILTER_TYPE_PT, fs.FT_ATOMIC_NUMBERS))
-    n_replay = n_pass if fs.FT_NUM_SAMPLES_PT is None else fs.FT_NUM_SAMPLES_PT
-    capped = n_replay > n_pass and not fs.FT_PADDING_PT   # MACE would stop in the job
-    if capped:
-        n_replay = n_pass
+        sys.exit("no replay config in %s passes filter %s %s -- check FT_ATOMIC_NUMBERS"
+                 % (replay, fs.FT_FILTER_TYPE_PT, fs.FT_ATOMIC_NUMBERS))
+    if fs.FT_REPLAY == "mp":
+        n_replay = n_pass if fs.FT_NUM_SAMPLES_PT is None else fs.FT_NUM_SAMPLES_PT
+        capped = n_replay > n_pass and not fs.FT_PADDING_PT   # MACE would stop in the job
+        if capped:
+            n_replay = n_pass
+    else:                                   # MACE reads the whole file
+        n_replay, capped = n_all, False
 
     folder = os.path.abspath(os.path.join(settings.RUN_DIR, FT_DIR, fs.FT_NAME))
     id_path = os.path.join(folder, layout.JOB_ID)
@@ -157,7 +166,7 @@ def main():
         "name": fs.FT_NAME,
         "foundation_model": os.path.abspath(fs.FT_FOUNDATION),
         "multiheads_finetuning": True,
-        "pt_train_file": "mp",
+        "pt_train_file": "mp" if fs.FT_REPLAY == "mp" else replay,
         "num_samples_pt": n_replay,
         "pseudolabel_replay": fs.FT_PSEUDOLABEL_REPLAY,
         "filter_type_pt": fs.FT_FILTER_TYPE_PT,
@@ -201,9 +210,10 @@ def main():
 
     print("training data  %s  (%d configs + E0s)" % (data_dir, n_train))
     print("foundation     %s" % fs.FT_FOUNDATION)
-    print("replay         %d of %d MP configs pass %s %s; using %d%s, padding %s, "
+    print("replay         %d of %d configs in %s pass %s %s; using %d%s, padding %s, "
           "pseudolabels %s"
-          % (n_pass, n_all, fs.FT_FILTER_TYPE_PT, fs.FT_ATOMIC_NUMBERS, n_replay,
+          % (n_pass, n_all, os.path.basename(replay), fs.FT_FILTER_TYPE_PT,
+             fs.FT_ATOMIC_NUMBERS, n_replay,
              " (FT_NUM_SAMPLES_PT = %d capped)" % fs.FT_NUM_SAMPLES_PT if capped else "",
              fs.FT_PADDING_PT, fs.FT_PSEUDOLABEL_REPLAY))
     print("weights        E:F = %g:%g, stage two from epoch %s at %g:%g"

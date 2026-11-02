@@ -40,13 +40,13 @@ elif MACHINE == "perlmutter":
     CPU_QOS = "shared"
     CPU_CONSTRAINT = "cpu"
     CPU_EXTRA = []
-    GPU_ACCOUNT = "SET_ME"
-    GPU_PARTITION = "SET_ME"
-    GPU_QOS = "SET_ME"
-    GPU_CONSTRAINT = "SET_ME"
-    GPU_REQUEST = "SET_ME"
+    GPU_ACCOUNT = "m3548_g"     # NERSC GPU jobs use the project's _g account
+    GPU_PARTITION = ""
+    GPU_QOS = "shared"          # NERSC: jobs with 1 or 2 GPUs use the shared QOS
+    GPU_CONSTRAINT = "gpu"
+    GPU_REQUEST = "--gpus=1"
     GPU_EXTRA = []
-    FT_MACE_RUN_TRAIN = "SET_ME"
+    FT_MACE_RUN_TRAIN = "/global/common/software/m3548/ivan1007/envs/mace-ft/bin/mace_run_train"
     VASP_SETUP = ["SET_ME"]
     VASP_LAUNCH = "SET_ME"
     VASP_CPUS_PER_RANK = "SET_ME"

@@ -7,11 +7,13 @@ import os
 
 import settings                 # the mace_ft scripts put scripts/ on sys.path first
 
-FT_NAME = "ft_round2_omat0_e1f10"   # folder <RUN_DIR>/MACE_ft/<FT_NAME>/; data = rounds 1+2
+FT_NAME = "ft_round2_mpa0_mpfilt_e1f10"   # folder <RUN_DIR>/MACE_ft/<FT_NAME>/; data = rounds 1+2
 # always start from the original foundation model, not the pipeline's model
 FT_FOUNDATION = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                             "models", "mace-omat-0-medium.model")
-FT_SUBMIT = True               # False: write config.yaml + job.sh only (dry run)
+                             "models", "mace-mpa-0-medium.model")
+FT_REPLAY = "mp"               # "mp": MACE's MP file, filtered by 01_train.py; or the path of a
+                                # filtered replay extxyz, which MACE reads whole
+FT_SUBMIT = False              # False: write config.yaml + job.sh only (dry run)
 
 # loss weights: stage one, then stage two (lower learning rate, more energy)
 FT_ENERGY_WEIGHT = 1.0
@@ -25,7 +27,7 @@ FT_STAGE_TWO_START = 40         # epoch at which stage two starts
 FT_BATCH_SIZE = 4
 FT_NUM_SAMPLES_PT = None        # MP replay size: None = every config that passes the filter;
                                 # a number = that many (capped at the count when padding is off)
-FT_PSEUDOLABEL_REPLAY = True    # relabel the replay with the foundation model
+FT_PSEUDOLABEL_REPLAY = False   # relabel the replay with the foundation model
 FT_FILTER_TYPE_PT = "combinations"     # none, combinations (only these elements),
                                        # exclusive (exactly these), inclusive (all of these + others)
 FT_ATOMIC_NUMBERS = [1, 6, 8, 13, 14]  # H, C, O, Al, Si
