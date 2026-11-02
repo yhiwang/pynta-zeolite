@@ -15,6 +15,8 @@ import glob
 import os
 import sys
 
+import numpy as np
+
 import _common  # noqa: F401
 import ft_settings as fs
 from ase.io import write
@@ -44,11 +46,12 @@ for path in paths:
     db = LMDBDatabase(path, readonly=True, use_lock_file=False)
     for row in db.select():
         n += 1
-        if not passes(set(row.numbers.tolist()), allowed, fs.FT_FILTER_TYPE_PT):
+        if not passes({int(z) for z in row.numbers}, allowed, fs.FT_FILTER_TYPE_PT):  # list or array
             continue
         n_pass += 1
         atoms = row.toatoms()
-        energy, forces = atoms.get_potential_energy(), atoms.get_forces()
+        energy = float(atoms.get_potential_energy())
+        forces = np.asarray(atoms.get_forces(), dtype=float)
         atoms.calc = None
         atoms.info = {"REF_energy": energy}
         atoms.arrays["REF_forces"] = forces
