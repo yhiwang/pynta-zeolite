@@ -11,8 +11,14 @@ FT_NAME = "ft_round2_mpa0_mpfilt_e1f10"   # folder <RUN_DIR>/MACE_ft/<FT_NAME>/;
 # always start from the original foundation model, not the pipeline's model
 FT_FOUNDATION = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                              "models", "mace-mpa-0-medium.model")
+# OMat24 replay for the OMAT-0 run: mace_ft/00_omat24_replay.py filters the train part
+# of the OMat24 1M subsplit to FT_ATOMIC_NUMBERS and writes FT_OMAT24_FILE
+FT_OMAT24_DIR = os.path.expandvars("$SCRATCH/omat24/train")
+FT_OMAT24_FILE = os.path.join(settings.RUN_DIR, "MACE_ft", "replay", "omat24_filtered.extxyz")
+FT_OMAT24_WRITE = False         # False: count only; True: write FT_OMAT24_FILE
+FT_OMAT24_KEEP = None           # None = every config that passes; a number = a random sample (FT_SEED)
 FT_REPLAY = "mp"               # "mp": MACE's MP file, filtered by 01_train.py; or the path of a
-                                # filtered replay extxyz, which MACE reads whole
+                                # filtered replay extxyz, which MACE reads whole (FT_OMAT24_FILE)
 FT_SUBMIT = False              # False: write config.yaml + job.sh only (dry run)
 
 # loss weights: stage one, then stage two (lower learning rate, more energy)
