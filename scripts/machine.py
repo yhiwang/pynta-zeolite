@@ -24,6 +24,8 @@ if MACHINE == "hive":
     GPU_CONSTRAINT = ""
     GPU_REQUEST = "--gres=gpu:1"
     GPU_EXTRA = []
+    GPU_CPUS = 8                # CPUs and memory of a one-GPU job (mace_ft/01_train.py)
+    GPU_MEMORY = "64G"
     # the mace-ft env's trainer, called directly (mace_ft/01_train.py)
     FT_MACE_RUN_TRAIN = os.path.expanduser("~/.conda/envs/mace-ft/bin/mace_run_train")
     # VASP (dft/02, dft/04, scripts/12): lines job.sh runs first, the MPI launch
@@ -46,6 +48,8 @@ elif MACHINE == "perlmutter":
     GPU_CONSTRAINT = "gpu"
     GPU_REQUEST = "--gpus=1"
     GPU_EXTRA = []
+    GPU_CPUS = 32               # the shared GPU queue requires exactly 32 cores per GPU
+    GPU_MEMORY = "48G"          # Slurm counts memory as cores too: about 54G at most for 32
     FT_MACE_RUN_TRAIN = "/global/common/software/m3548/ivan1007/envs/mace-ft/bin/mace_run_train"
     VASP_SETUP = ["SET_ME"]
     VASP_LAUNCH = "SET_ME"

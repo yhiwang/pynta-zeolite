@@ -36,6 +36,4 @@ FT_DTYPE = "float32"            # float64 is MACE's default, but these GPUs are 
                                 # in double precision; float32 is fine for training
 FT_SEED = 123
 
-FT_SLURM_CPUS = 8
-FT_SLURM_MEMORY = "64G"
 FT_SLURM_TIME = "24:00:00"

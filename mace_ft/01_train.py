@@ -204,9 +204,9 @@ def main():
             handle.write("%s: %s\n" % (key, yaml_value(value)))
     with open(os.path.join(folder, layout.JOB_SCRIPT), "w") as handle:
         handle.write(JOB_TEMPLATE.format(
-            header=machine.sbatch_header(fs.FT_SLURM_CPUS, fs.FT_SLURM_MEMORY,
+            header=machine.sbatch_header(machine.GPU_CPUS, machine.GPU_MEMORY,
                                          fs.FT_SLURM_TIME, name=fs.FT_NAME, gpu=True),
-            cpus=fs.FT_SLURM_CPUS, trainer=machine.FT_MACE_RUN_TRAIN, config=CONFIG))
+            cpus=machine.GPU_CPUS, trainer=machine.FT_MACE_RUN_TRAIN, config=CONFIG))
 
     print("training data  %s  (%d configs + E0s)" % (data_dir, n_train))
     print("foundation     %s" % fs.FT_FOUNDATION)
