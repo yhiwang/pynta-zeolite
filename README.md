@@ -4,14 +4,12 @@ A Pynta-style workflow adapted to Brønsted-acid zeolites. From an IZA
 framework and a set of reactions written as RMG adjacency lists, pyntaz
 
 1. builds the bare framework with one or two Al and finds the acid-site oxygens,
-2. places every species on every site and relaxes it with MACE,
-3. keeps the relaxed configurations that held together and deduplicates them,
-4. builds transition-state guesses straight from each reaction's graph,
+2. builds transition-state guesses straight from each reaction's graph,
    seated on pairs of framework oxygens, and deduplicates them,
-5. pre-relaxes every guess with MACE plus harmonic springs on the reacting
+3. pre-relaxes every guess with MACE plus harmonic springs on the reacting
    bonds, toward the TS and toward its initial and final states,
-6. searches for the saddle point with Sella and checks it with frequencies,
-7. collects initial state, TS and final state of every guess for NEB.
+4. searches for the saddle point with Sella and checks it with frequencies,
+5. collects initial state, TS and final state of every guess for NEB.
 
 Two side stages close the loop: `dft/` runs VASP single points on frames
 from the Sella searches, and `mace_ft/` fine-tunes the MACE foundation model
@@ -110,7 +108,7 @@ is not interpreted ...` (from ASE reading the cif).
 - **A job was submitted but never finished.** Steps 7, 8 and `dft/` write
   `job.id` and skip folders that have one. Check `job.err`, then delete
   `job.id` (or the folder) to resubmit.
-- **`import openmm` fails.** Only `openmm/02_openmm_restrain.py` needs it.
+- **`import openmm` fails.** Only `archive/openmm/02_openmm_restrain.py` needs it.
 
 ---
 
@@ -127,10 +125,7 @@ pynta-zeolite/
 │   ├── adjlist.py        3D geometry from an adjacency list: rings, torsions, X sites
 │   ├── reactions.py      reaction.yaml -> RMG molecules
 │   ├── pynta_mol.py      get_adsorbate / get_name, vendored from pynta
-│   ├── placement.py      monodentate and bidentate orientation sweeps
-│   ├── adsorbates.py     every species on every site                  (step 1)
-│   ├── relax.py          MACE relaxation, framework frozen             (step 2)
-│   ├── filtering.py      bond-survival test and RMSD clustering        (steps 3, 6)
+│   ├── filtering.py      RMSD clustering of the TS guesses             (step 6)
 │   ├── ts_graph.py       TS guesses from the merged reaction graph     (step 5)
 │   ├── harmonic_relax.py staged MACE relax with springs; TS, initial, final  (step 7)
 │   ├── ts_sella.py       Sella saddle search, frequency check, verdict (step 8)
@@ -138,12 +133,11 @@ pynta-zeolite/
 ├── scripts/              one script per step, run in order
 │   ├── settings.py       EVERY setting for a run: framework, sites, thresholds, model, SLURM
 │   ├── layout.py         the only file that knows the run-directory layout
-│   ├── 00_build_framework.py ... 09_collect_neb.py
-│   └── workers and helpers: relax_one.py, harmonic_one.py, ts_sella_one.py
-│                (run inside SLURM jobs), place_one_adsorbate.py,
-│                rotate_chain.py, demo_framework.py
+│   ├── 00_build_framework.py ... 14_submit_dft_vib.py
+│   └── workers and helpers: harmonic_one.py, ts_sella_one.py, neb_one.py,
+│                dft_sella_one.py, dft_vib_one.py (run inside SLURM jobs),
+│                machine.py, archive_round.py
 ├── analysis/             plots and tables from a run; read-only, safe to rerun
-│   ├── plot_relax_sweep.py       energy vs orientation after step 2
 │   ├── plot_pair_counts.py       site x site TS guess counts after step 6
 │   ├── summarize_endpoints.py    endpoint_summary.csv + .png from step 7
 │   ├── summarize_ts.py           ts_summary.csv + .png from step 8
@@ -152,9 +146,12 @@ pynta-zeolite/
 │   └── plotting.py, ts_summary.py, endpoint_summary.py   code the scripts above use
 ├── dft/                  VASP single points -> MACE training set; settings in dft_settings.py
 ├── mace_ft/              MACE fine-tuning on that set; settings in ft_settings.py
-├── openmm/               the test bed steps 7-8 grew out of, kept for reference
+├── demo/                 demo_framework.py, rotate_chain.py: small tours of the API
 ├── tests/                standalone checks, print PASS/FAIL
-└── archive/              the old endpoint-pair TS route, kept for reference
+└── archive/              kept for reference, not run:
+    ├── adsorbates/       the adsorbate branch (old steps 1-3): placement, MACE relax, filter
+    ├── openmm/           the test bed steps 7-8 grew out of
+    └── endpoint_pairs/   the old endpoint-pair TS route
 ```
 
 ---
@@ -172,12 +169,8 @@ The key settings are `CODE`, `SITES`, `SITE_RULE`, `MACE_MODEL` and
 Output goes to `runs/<CODE>_<SITES>/`.
 
 ```bash
-# framework and adsorbates
+# framework
 python scripts/00_build_framework.py     # bare framework + sites
-python scripts/01_build_adsorbates.py    # every species on every site
-python scripts/02_submit_relax.py        # one MACE job per config
-python scripts/03_filter_relax.py        # after the jobs finish: survivors, unique minima
-python analysis/plot_relax_sweep.py      # optional: energy vs orientation
 
 # transition states
 python scripts/05_build_ts_guesses.py    # TS guesses from reaction.yaml, needs only step 0
@@ -190,8 +183,7 @@ python analysis/summarize_ts.py          # which searches found the TS (--reason
 python scripts/09_collect_neb.py         # IS / TS / FS per guess into NEB/, barrier table
 ```
 
-Steps 5–9 don't need steps 1–4: TS guesses are built from the reaction
-graph and the framework alone.
+TS guesses are built from the reaction graph and the framework alone.
 
 Steps 7 and 8 submit one job per guess (and per state or start). Rerun them
 once jobs finish: finished folders are skipped, folders with a running job
@@ -217,11 +209,6 @@ still waiting.
 ```
 runs/<CODE>_<SITES>/
 ├── bare.xyz, framework.json, <CODE>_pairs.json                    step 0
-├── Adsorbates/<species>/<site>/<stem>/<stem>_init.xyz             step 1  (+ info.json per species)
-├── Adsorbates_relax/<species>/<site>/<stem>/relax.{xyz,traj,log}  step 2
-├── Adsorbates_relax_filtered/<species>/<site>/<stem>.xyz          step 3
-├── Adsorbates_relax_unique/<species>/<site>/<stem>.xyz            step 3
-├── <species>_sweep.png                                            plot_relax_sweep.py
 ├── TS_guesses/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz             step 5  (+ info.json, sweep.traj)
 ├── TS_unique/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz              step 6  (+ info.json, pair_counts.png)
 ├── TS_harmonic/<i>_rxn/pair_<k>/<stem>/                           step 7
@@ -237,12 +224,9 @@ runs/<CODE>_<SITES>/
 └── MACE_ft/<FT_NAME>/                                             mace_ft/ 01
 ```
 
-`<site>` is the zero-padded index into the framework's site list (`0/gas`
-for a gas-phase molecule). `<stem>` names the orientation:
-`degrees_045` (monodentate), `flip0_phi105_psi240` (bidentate),
-`flip0_tor045-120_ax1_roll090` (TS guess). The summaries land next to the
-data they describe: `TS_harmonic/endpoint_summary.{csv,png}`,
-`TS_sella/ts_summary.{csv,png}`.
+`<stem>` names the TS guess, e.g. `flip0_tor045-120_ax1_roll090`. The
+summaries land next to the data they describe:
+`TS_harmonic/endpoint_summary.{csv,png}`, `TS_sella/ts_summary.{csv,png}`.
 
 ---
 
@@ -271,19 +255,18 @@ are the ones you will actually change.
 | `RUN_DIR` | `runs/<CODE>_<SITES>`; a new `CODE` or `SITES` means a new run directory |
 | `REACTIONS` | the reaction file, `reaction.yaml` |
 | `SITE_RULE` | two Al only: `"cross"` (O pairs bridging the two Al) or `"all"` (every first-shell O and pair). Saved in `framework.json` at step 0; never change it inside an existing run |
-| `MACE_MODEL` | model file for steps 2, 7 and 8 (env `PYNTAZ_MODEL`) |
-| `SUBMIT` | `False` writes every job folder and `job.sh` without submitting (dry run); used by steps 2, 7 and 8 |
+| `MACE_MODEL` | model file for steps 7, 8 and 10 (env `PYNTAZ_MODEL`) |
+| `SUBMIT` | `False` writes every job folder and `job.sh` without submitting (dry run); used by steps 7, 8, 10, 12 and 14 |
 
-The SLURM block (`PYTHON`, `SLURM_ACCOUNT`, `SLURM_PARTITION`,
-`SLURM_MEMORY`) under step 2 is shared by steps 7 and 8, which only set
-their own core count and wall time.
+`SLURM_MEMORY` is shared by steps 7, 8 and 10, which set their own core
+count and wall time. The account, partition and env Python come from
+`scripts/machine.py`.
 
 ### Per step
 
 | step | settings | notes |
 |---|---|---|
 | 0 framework | `SUPERCELL_MIN_LENGTH`, `BIDENTATE_MAX_SPAN` | supercell edge (Å); longest O–O that counts as a site pair |
-| 1–3 adsorbates | `GAS_VACUUM`, `SKIP`, `RELAX_FMAX`, `RELAX_MAX_STEPS`, `BOND_CHANGE_THRESHOLD`, `RMSD_THRESHOLD` | orientation sweep sizes are in `pyntaz/placement.py` |
 | 5 TS guesses | `TS_MAX_SPAN`, `TS_TORSION_STEPS`, `TS_ROLL_STEPS`, `TS_SPAN_TOLERANCE`, `TS_SITE_SCALE_RANGE`, `TS_BOND_STRETCH`, `TS_CLEARANCE_MIN` | sweep size and how strictly a guess must fit its O–O pair |
 | 6 dedup | `TS_RMSD_THRESHOLD`, `TS_KEEP_PER_DIRECTION` | ~0.8 Å merges a 60° tail rotation, ~2 Å also merges C=C swaps; `1` keeps one guess per pair and direction |
 | 7 harmonic | `TS_HARMONIC_REACTIONS`, `TS_HARMONIC_STATES`, `TS_HARMONIC_MODES`, `TS_HARMONIC_K`, `TS_HARMONIC_FRAMEWORK_RADIUS`, `TS_HARMONIC_STEPS`, `TS_HARMONIC_MAX_CYCLES`, `TS_HARMONIC_FREE_STEPS`, `TS_HARMONIC_BOND_CUTOFF` | `TS_HARMONIC_MODES` sets, per state, which bonds get springs and their target (r_i + r_j) × `mult` |
@@ -415,7 +398,7 @@ reprotonation and methyl shift (reactions 0–6).
 
 ---
 
-## `openmm/` (reference)
+## `archive/openmm/` (reference)
 
 The self-contained test bed where the TS refinement was developed before it
 moved into steps 7–8 (`pyntaz/harmonic_relax.py`, `pyntaz/ts_sella.py`).

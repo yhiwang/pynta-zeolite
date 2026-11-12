@@ -11,8 +11,6 @@ are laid out in the same shape under
     <RUN_DIR>/TS_unique/<i>_rxn/info.json          manifest + kept / merged
     <RUN_DIR>/TS_unique/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz
 
-so the relaxation submitter can be pointed at either tree.
-
 The kept / merged record in info.json is what analysis/plot_pair_counts.py
 tables per site pair.
 

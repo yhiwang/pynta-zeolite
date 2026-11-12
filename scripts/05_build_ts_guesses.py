@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """Step 5 -- build transition-state guesses straight from the reaction graph.
 
-Needs only the saved framework (step 0) and reaction.yaml, none of the
-Adsorbates trees. For every reaction, every oxygen pair within
+Needs only the saved framework (step 0) and reaction.yaml. For every
+reaction, every oxygen pair within
 settings.TS_MAX_SPAN by the site rule saved with the framework ("all":
 any two first-shell oxygens; "cross": only cross-Al pairs) is tried both
 ways round (flip0 / flip1 = which X goes on which O); see
@@ -13,8 +13,7 @@ pyntaz/ts_graph.py for the sweep itself. Writes
     <RUN_DIR>/TS_guesses/<i>_rxn/pair_<k>/sweep.traj       every roll, for ase gui
 
 one <stem> folder per surviving torsion x axial combination at its
-best-clearance roll (skipped below settings.TS_CLEARANCE_MIN), in the same
-shape as Adsorbates/ so the relaxation submitter can be pointed at it.
+best-clearance roll (skipped below settings.TS_CLEARANCE_MIN).
 """
 
 import json

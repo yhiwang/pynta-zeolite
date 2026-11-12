@@ -2,7 +2,7 @@
 """Rotate one chain of an adsorbate and save the frames as a .traj -- a
 quick look at what AdjacencyStructure does with a torsion.
 
-    python scripts/rotate_chain.py
+    python demo/rotate_chain.py
 
 Edit ADJLIST, BOND and ANGLES below. ``mol.report()`` prints every bond you
 are allowed to put in BOND.

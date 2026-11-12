@@ -1,4 +1,4 @@
-"""pyntaz -- adsorbates and transition-state guesses in zeolite pores.
+"""pyntaz -- transition states in zeolite pores.
 
 The chemistry and the algorithms, and nothing else: every function here
 takes and returns in-memory objects (ase Atoms, RMG Molecules, plain dicts)
@@ -12,10 +12,7 @@ Module map, in workflow order:
     framework    build_framework(code, t_labels) -> ZeoliteFramework with sites
     reactions    yaml text -> ReactionSet: species, adjacency lists, reactions
     pynta_mol    get_adsorbate / get_name, vendored from pynta
-    placement    place_monodentate / place_bidentate orientation sweeps
-    adsorbates   species_guesses: every species on every site       (step 1)
-    relax        MACE relaxation of one structure, framework frozen  (step 2)
-    filtering    bond-survival test and RMSD deduplication           (step 3)
+    filtering    RMSD deduplication of the TS guesses                (step 6)
     adjlist      AdjacencyStructure: 3D coordinates from an adjacency list
     ts_graph     TSGraph + PairSweep: TS guesses from the reaction graph (step 5)
     harmonic_relax  staged spring pre-relax of one TS guess with MACE (step 7)
@@ -26,8 +23,9 @@ Every numeric default lives next to the function that uses it, as a
 keyword argument; the step scripts pass their own values from
 ``scripts/settings.py``.
 
-Nothing is imported here on purpose: ``relax`` must be importable on a
-compute node without maze or RMG installed, so import the module you need
+Nothing is imported here on purpose: ``harmonic_relax``, ``ts_sella`` and
+``neb`` must be importable on a compute node without maze or RMG installed,
+so import the module you need
 (``from pyntaz import framework``).
 """
 

@@ -49,41 +49,23 @@ BIDENTATE_MAX_SPAN = 3.5        # A, longest O-O distance that counts as a site 
 SITE_RULE = "all"
 
 # --------------------------------------------------------------------------
-# step 1: placement
-# --------------------------------------------------------------------------
-
-GAS_VACUUM = 10.0               # A of vacuum around a gas-phase molecule
-# sweep sizes (24 spin angles, 24 phi x 12 psi) are set in pyntaz/placement.py
-
-# --------------------------------------------------------------------------
-# step 2: relaxation and SLURM
+# shared by the job steps: the dry-run switch (steps 7, 8, 10, 12 and 14),
+# the MACE model and the memory of a MACE job (steps 7, 8 and 10)
 # --------------------------------------------------------------------------
 
 SUBMIT = True                   # False: write job dirs + job.sh only (dry run)
-SKIP = ()                       # species names to leave out
-RELAX_FMAX = 0.05               # eV/A
-RELAX_MAX_STEPS = 100
 
 # a model *file*: a bare model name makes MACE try to download it, which
 # fails on a compute node without internet
 # MACE_MODEL = os.environ.get(
 #     "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa-0-medium.model"))
 
-# the model steps 02-10 sample with: the fine-tuned model of the previous
+# the model steps 07-10 sample with: the fine-tuned model of the previous
 # round (copy it into models/ and change this line when a round ends)
 MACE_MODEL = os.environ.get(
     "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa0-ft-MOR_T4-round2-e1f10.model"))
 
-SLURM_CORES = 4
 SLURM_MEMORY = "16G"
-SLURM_TIME = "04:00:00"
-
-# --------------------------------------------------------------------------
-# step 3: filtering
-# --------------------------------------------------------------------------
-
-BOND_CHANGE_THRESHOLD = 0.5     # A, a bond that moved more than this has broken
-RMSD_THRESHOLD = 2.0            # A, below this two relaxed configs are the same minimum
 
 # --------------------------------------------------------------------------
 # step 5: TS guesses from the reaction graph
@@ -112,7 +94,8 @@ TS_KEEP_PER_DIRECTION = None    # cap on clusters kept per pair and direction, o
 
 # --------------------------------------------------------------------------
 # step 7: harmonic pre-relax of the TS guesses (one SLURM job per guess;
-# SUBMIT, PYTHON, MACE_MODEL, account, partition and memory as in step 2)
+# SUBMIT, MACE_MODEL and memory from the shared block above; PYTHON, account
+# and partition from machine.py)
 # --------------------------------------------------------------------------
 
 TS_HARMONIC_REACTIONS = None    # None: every reaction in TS_unique; or e.g. [0, 3]
@@ -142,7 +125,8 @@ TS_HARMONIC_SLURM_TIME = "01:00:00"
 
 # --------------------------------------------------------------------------
 # step 8: Sella saddle search on the TS guesses (one SLURM job per guess and
-# start; SUBMIT, PYTHON, MACE_MODEL, account, partition and memory as in step 2)
+# start; SUBMIT, MACE_MODEL and memory from the shared block above; PYTHON,
+# account and partition from machine.py)
 # --------------------------------------------------------------------------
 
 TS_SELLA_REACTIONS = None       # None: every reaction in TS_harmonic; or e.g. [0, 3]
@@ -175,7 +159,8 @@ NEB_FREE_RADIUS = TS_HARMONIC_FRAMEWORK_RADIUS   # A, framework atoms this close
 
 # --------------------------------------------------------------------------
 # step 10: climbing-image NEB with MACE (one SLURM job per guess; SUBMIT,
-# PYTHON, MACE_MODEL, account, partition and memory as in step 2)
+# MACE_MODEL and memory from the shared block above; PYTHON, account and
+# partition from machine.py)
 # --------------------------------------------------------------------------
 
 NEB_REACTIONS = None            # None: every reaction in NEB/; or e.g. [0, 3]
