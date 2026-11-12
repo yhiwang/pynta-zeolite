@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 """Harmonic relax of one raw TS guess with MACE, toward one state. This is
-the worker that job.sh runs (step 7 writes the job).
+the worker that job.sh runs (step 3 writes the job).
 
     python ts_harmonic_one.py <stem>_init.xyz <state>
 
 <state> is a key of settings.TS_HARMONIC_MODES: "ts" (springs on every
 forming and breaking bond), "initial" (breaking bonds only, then a
 spring-free relax) or "final" (forming bonds only, then a spring-free
-relax). Reads ts_bonds.json next to the input (written by step 7). Writes,
+relax). Reads ts_bonds.json next to the input (written by step 3). Writes,
 into layout.harmonic_job_dir(<guess folder>, state):
 
     ts        ts_harmonic.xyz / .traj / .log       in the guess folder

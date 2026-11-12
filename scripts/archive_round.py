@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Move one round's pipeline results out of the way, so steps 07-10 start
+"""Move one round's pipeline results out of the way, so steps 03-06 start
 clean with the next model.
 
     python scripts/archive_round.py        # MOVE = False: dry run, shows what would move
@@ -27,7 +27,7 @@ import layout
 import settings
 
 ROUND = settings.ROUND                        # from scripts/settings.py
-FOLDERS = ("TS_harmonic", "TS_sella", "NEB")  # the folders steps 07-10 write
+FOLDERS = ("TS_harmonic", "TS_sella", "NEB")  # the folders steps 03-06 write
 MOVE = False                                  # False: dry run
 
 
@@ -91,4 +91,4 @@ if not MOVE:
 os.makedirs(target, exist_ok=True)
 for name in present:
     shutil.move(os.path.join(run_dir, name), os.path.join(target, name))
-print("\nmoved %d folders. Steps 07-10 now start clean in %s" % (len(present), run_dir))
+print("\nmoved %d folders. Steps 03-06 now start clean in %s" % (len(present), run_dir))

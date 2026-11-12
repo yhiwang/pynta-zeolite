@@ -1,15 +1,15 @@
 #!/usr/bin/env python
-"""Step 11 -- collect the TS of every finished NEB worth a DFT search into
+"""Step 7 -- collect the TS of every finished NEB worth a DFT search into
 DFT_TS/, with everything about it in one place. Submits nothing; runs on the
 login node.
 
-    python scripts/11_collect_ts.py
+    python scripts/07_collect_ts.py
 
 A band is collected when its neb_result.json verdict is in
 TS_COLLECT_VERDICTS (default connected, different_ts: the climbing stage got
 below NEB_FMAX and the band has a single barrier). Everything comes from
 neb_band.traj -- one model, one free region, end points re-relaxed -- never
-mixed with the step 7/8 energies in neb.json, which used smaller free regions:
+mixed with the step 3/4 energies in neb.json, which used smaller free regions:
 
     <RUN_DIR>/DFT_TS/<i>_rxn/pair_<k>/<stem>/ts.xyz        the top (climbing) image
     <RUN_DIR>/DFT_TS/<i>_rxn/pair_<k>/<stem>/initial.xyz   the band's initial state
@@ -28,7 +28,7 @@ ts_info.json
               initial state, the TS and the final state (A, minimum image)
     neb       verdict, converged, final band fmax and its limit, steps per
               stage, top image, top vs Sella TS (RMSD, bond change, energy),
-              model, and the step 8 Sella imaginary frequency
+              model, and the step 4 Sella imaginary frequency
     energies  MACE E of initial, TS, final; Ea_fwd, Ea_rev, dE_rxn; ts_fmax,
               the largest force on a free atom of the TS
 

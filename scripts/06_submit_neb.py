@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""Step 10 -- submit one climbing-image NEB with MACE per band that step 9
+"""Step 6 -- submit one climbing-image NEB with MACE per band that step 5
 built (see pyntaz/neb.py).
 
-    <RUN_DIR>/NEB/<i>_rxn/pair_<k>/<stem>/band.traj   from step 9, the input
+    <RUN_DIR>/NEB/<i>_rxn/pair_<k>/<stem>/band.traj   from step 5, the input
     <RUN_DIR>/NEB/<i>_rxn/pair_<k>/<stem>/job.sh      runs scripts/neb_one.py
 
 The job runs in the guess folder and writes neb.traj, neb.log,
@@ -10,10 +10,10 @@ neb_band.traj, neb.png and, last, neb_result.json there.
 
 Guesses with neb_result.json are reported with their verdict and skipped;
 guesses submitted before whose job has not finished (job.id present) are
-left alone -- delete job.id to resubmit a failed one, and rerun step 9 first
+left alone -- delete job.id to resubmit a failed one, and rerun step 5 first
 if you changed the band settings. NEB_REACTIONS picks reactions and
 NEB_MAX_PER_REACTION keeps only the lowest-barrier guesses of each (Ea_fwd
-from step 9's neb.json, MACE).
+from step 5's neb.json, MACE).
 
 settings.SUBMIT = False writes job.sh but submits nothing (dry run). Each
 job runs scripts/neb_one.py from this checkout, so keep it where it is
@@ -87,7 +87,7 @@ for name, path in missing_machine_paths():
 if missing_machine_paths():
     sys.exit("fix scripts/settings.py or set the PYNTAZ_* environment variables")
 if not os.path.isdir(run.neb):
-    sys.exit("%s not found -- run step 9 first" % run.neb)
+    sys.exit("%s not found -- run step 5 first" % run.neb)
 
 wanted = settings.NEB_REACTIONS
 cap = settings.NEB_MAX_PER_REACTION

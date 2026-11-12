@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-"""DFT vibrations at one TS that step 13 collected. This is the worker that
-job.sh runs inside every DFT_TS/.../<stem>/quasi_irc/vib/ folder (step 14
+"""DFT vibrations at one TS that step 9 collected. This is the worker that
+job.sh runs inside every DFT_TS/.../<stem>/quasi_irc/vib/ folder (step 10
 writes the job).
 
     python dft_vib_one.py ../start.xyz
 
-start.xyz is the DFT Sella TS (step 12's ts_dft.xyz) and ts_info.json sits
-next to it (both copied there by step 13). Finite differences with ASE's
+start.xyz is the DFT Sella TS (step 8's ts_dft.xyz) and ts_info.json sits
+next to it (both copied there by step 9). Finite differences with ASE's
 Vibrations (pyntaz.ts_sella.frequency_check): every vibrating atom moves
 +-DFT_VIB_DELTA along x, y and z, one VASP single point each, 6 n + 1 in all.
 VASP runs through ASE with SP_VASP from dft/dft_settings.py plus
@@ -20,10 +20,10 @@ Vibrating atoms (every other atom stays where it is):
 
 Every single point must reach EDIFF. When VASP stops at NELM first, the job
 stops with an error before that displacement goes into the cache: raise nelm
-in DFT_VIB_VASP_CHANGES and rerun step 14 with --resume.
+in DFT_VIB_VASP_CHANGES and rerun step 10 with --resume.
 
 Resuming: a job stopped by the time limit (or by the check above) keeps every
-finished displacement in displacements/; step 14 --resume continues with the
+finished displacement in displacements/; step 10 --resume continues with the
 rest (the empty file of the unfinished one is removed first). After a failure
 job.sh deletes the big VASP files (layout.DFT_VIB_BULKY), so the resumed job
 starts without a WAVECAR; after a time-out they stay. The cache is
@@ -35,7 +35,7 @@ Writes in vib/:
     displacements/        ASE's cache, one file per displacement
     displacements.0.traj  the first mode as an animation, for ase gui
     mode.xyz              start.xyz with the first mode as the per-atom array
-                          "mode" (step 15 pushes along it)
+                          "mode" (step 11 pushes along it)
     result.json           verdict, frequencies, vibrating atoms; written last,
                           so it also marks the job as finished
 
@@ -81,7 +81,7 @@ def vasp_calculator(directory):
             if not self.converged:
                 raise RuntimeError(
                     "SCF stopped before EDIFF (nelm %s), see %s/OUTCAR: raise nelm in "
-                    "DFT_VIB_VASP_CHANGES, then rerun step 14 with --resume"
+                    "DFT_VIB_VASP_CHANGES, then rerun step 10 with --resume"
                     % (params.get("nelm"), self.directory))
 
     return CheckedVasp(directory=directory, **params), params

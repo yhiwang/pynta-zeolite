@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Step 6 -- filter the TS guesses step 5 wrote down to distinct ones.
+"""Step 2 -- filter the TS guesses step 1 wrote down to distinct ones.
 
 Reads every <RUN_DIR>/TS_guesses/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz
 together with its manifest record from the reaction's info.json. Within
@@ -32,7 +32,7 @@ from pyntaz.filtering import cluster_by_rmsd
 run = layout.RunLayout(settings.RUN_DIR)
 
 if not os.path.isdir(run.ts_guesses):
-    sys.exit("%s not found -- run step 5 first" % run.ts_guesses)
+    sys.exit("%s not found -- run step 1 first" % run.ts_guesses)
 
 # --------------------------------------------------------------------------
 # collect, filter, copy -- one reaction at a time

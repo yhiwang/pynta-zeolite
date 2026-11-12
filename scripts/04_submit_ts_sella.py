@@ -1,24 +1,24 @@
 #!/usr/bin/env python
-"""Step 8 -- set up TS_sella/ from TS_harmonic/ and submit one Sella saddle
+"""Step 4 -- set up TS_sella/ from TS_harmonic/ and submit one Sella saddle
 search per TS guess and start (see pyntaz/ts_sella.py).
 
 Every guess is searched from each start in settings.TS_SELLA_STARTS, in its
 own folder, so the two can be compared side by side:
 
-    harmonic   step 7's ts_harmonic.xyz (framework relaxed, bonds pulled
+    harmonic   step 3's ts_harmonic.xyz (framework relaxed, bonds pulled
                to the spring targets)
-    raw        the unrelaxed step 5 guess, <stem>_init.xyz
+    raw        the unrelaxed step 1 guess, <stem>_init.xyz
 
     <RUN_DIR>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/start.xyz       copied
     <RUN_DIR>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/ts_bonds.json   copied
     <RUN_DIR>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/job.sh
 
-A "harmonic" start whose step 7 job has not finished (no ts_harmonic.xyz
+A "harmonic" start whose step 3 job has not finished (no ts_harmonic.xyz
 yet) is reported as waiting and not submitted; run this again later to pick
 it up. Starts that already have result.json are skipped, and so are starts
 submitted before whose job has not written result.json yet (job.id is in
 their folder; delete the folder to resubmit a failed one). Needs no RMG: the
-reacting bonds come from step 7's ts_bonds.json.
+reacting bonds come from step 3's ts_bonds.json.
 
 settings.SUBMIT = False writes everything but job submission (dry run).
 Each job runs scripts/ts_sella_one.py from this checkout, so keep it where
@@ -82,7 +82,7 @@ for name, path in missing_machine_paths():
 if missing_machine_paths():
     sys.exit("fix scripts/settings.py or set the PYNTAZ_* environment variables")
 if not os.path.isdir(run.ts_harmonic):
-    sys.exit("%s not found -- run step 7 first" % run.ts_harmonic)
+    sys.exit("%s not found -- run step 3 first" % run.ts_harmonic)
 unknown = [start for start in settings.TS_SELLA_STARTS if start not in STARTS]
 if unknown:
     sys.exit("unknown TS_SELLA_STARTS %s; choose from %s" % (unknown, list(STARTS)))
@@ -109,7 +109,7 @@ for reaction_name, reaction_dir in layout.species_dirs(run.ts_harmonic):
         bonds_json = os.path.join(config_dir, layout.TS_BONDS_JSON)
         pair = relative.split(os.sep)[0]
         if not os.path.isfile(bonds_json):
-            print("  skipped        %s  (step 7 did not set it up: no %s)"
+            print("  skipped        %s  (step 3 did not set it up: no %s)"
                   % (relative, layout.TS_BONDS_JSON))
             counts["skipped"] += 1
             continue
@@ -148,13 +148,13 @@ for reaction_name, reaction_dir in layout.species_dirs(run.ts_harmonic):
                 print("  would submit   %s" % label)
             counts["submit"] += 1
 
-    print("  %d %s, %d already done, %d in the queue, %d waiting for step 7, %d guesses skipped"
+    print("  %d %s, %d already done, %d in the queue, %d waiting for step 3, %d guesses skipped"
           % (counts["submit"], "submitted" if settings.SUBMIT else "to submit",
              counts["done"], counts["queued"], counts["waiting"], counts["skipped"]))
     for key in totals:
         totals[key] += counts[key]
 
-print("\n%d starts %s, %d already done, %d in the queue, %d waiting for step 7, "
+print("\n%d starts %s, %d already done, %d in the queue, %d waiting for step 3, "
       "%d guesses skipped  (%s)"
       % (totals["submit"], "submitted" if settings.SUBMIT else "would be submitted",
          totals["done"], totals["queued"], totals["waiting"], totals["skipped"], run.ts_sella))

@@ -1,6 +1,6 @@
-"""Step 7 of the workflow: harmonic pre-relax of one TS guess with MACE.
+"""Step 3 of the workflow: harmonic pre-relax of one TS guess with MACE.
 
-A TS guess from step 5 has every changing bond at a rough length and sits
+A TS guess from step 1 has every changing bond at a rough length and sits
 on a framework that was never relaxed around the Al. Before a saddle
 search, this relaxes it in alternating stages, each moving one group of
 atoms with everything else fixed:
@@ -37,7 +37,7 @@ from ase.data import covalent_radii
 from ase.io.trajectory import Trajectory
 from ase.optimize import BFGS
 
-MULT = {"form": 1.2, "break": 1.2}   # TS length = (r_i + r_j) x this; fallback only; step 7 passes settings.TS_HARMONIC_MODES
+MULT = {"form": 1.2, "break": 1.2}   # TS length = (r_i + r_j) x this; fallback only; step 3 passes settings.TS_HARMONIC_MODES
 K_RESTRAINT = 30.0                     # eV/A^2
 FRAMEWORK_RADIUS = 4.0                 # A
 STEPS = {"framework": 100, "spectators": 20, "reacting": 100}

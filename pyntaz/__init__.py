@@ -12,11 +12,11 @@ Module map, in workflow order:
     framework    build_framework(code, t_labels) -> ZeoliteFramework with sites
     reactions    yaml text -> ReactionSet: species, adjacency lists, reactions
     pynta_mol    get_adsorbate / get_name, vendored from pynta
-    filtering    RMSD deduplication of the TS guesses                (step 6)
+    filtering    RMSD deduplication of the TS guesses                (step 2)
     adjlist      AdjacencyStructure: 3D coordinates from an adjacency list
-    ts_graph     TSGraph + PairSweep: TS guesses from the reaction graph (step 5)
-    harmonic_relax  staged spring pre-relax of one TS guess with MACE (step 7)
-    ts_sella     Sella saddle search + frequency check of one TS start  (step 8)
+    ts_graph     TSGraph + PairSweep: TS guesses from the reaction graph (step 1)
+    harmonic_relax  staged spring pre-relax of one TS guess with MACE (step 3)
+    ts_sella     Sella saddle search + frequency check of one TS start  (step 4)
     connectivity structure vs adjacency list: check a map, find the maps (any step)
 
 Every numeric default lives next to the function that uses it, as a

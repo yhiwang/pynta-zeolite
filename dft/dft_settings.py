@@ -22,7 +22,7 @@ COLLECT_STARTS = ("harmonic", "raw")
 COLLECT_VERDICTS = None         # None: every verdict; or e.g. ("ts", "wrong_mode")
 COLLECT_MAX_FRAMES = 3          # per trajectory, end points included; None: no cap
 
-# harmonic: initial / final states of TS_harmonic (step 7)
+# harmonic: initial / final states of TS_harmonic (scripts/03)
 COLLECT_HARMONIC_STATES = ("initial", "final")
 COLLECT_HARMONIC_VERDICTS = None    # None: every verdict; or ("ok",)
 COLLECT_HARMONIC_MAX_FRAMES = 1     # 1: only the relaxed structure; more adds
@@ -76,23 +76,7 @@ SP_SLURM_MEMORY = "64G"
 SP_SLURM_TIME = "00:30:00"
 
 # --------------------------------------------------------------------------
-# dft step 3: training set from the finished single points
-# --------------------------------------------------------------------------
-
-TRAIN_SPLIT_BY = "config"       # "config": each config at random; "run": whole Sella runs
-TRAIN_VALID_FRACTION = 0.1      # share going to valid   <- set your proportions here
-TRAIN_TEST_FRACTION = 0.1       # share going to test       (the rest is train)
-TRAIN_HOLDOUT_REACTIONS = []    # e.g. [6]: these reactions go to test entirely
-TRAIN_SEED = 0                  # fixes the random draw (same seed = same split)
-TRAIN_MAX_FORCE = 20.0          # eV/A, configs with any larger DFT force are dropped
-TRAIN_ROUNDS = None             # None: every round under DFT_sp; or ("round1", "round2")
-TRAIN_SOURCES = None            # None: every source; or ("sella", "neb")
-TRAIN_KEEP_SPLITS = {           # earlier split.csv to honour: {prefix: path}, both under DFT_sp
-    "round1/sella": "round1/training_round1/split.csv",
-}
-
-# --------------------------------------------------------------------------
-# dft step 4: isolated atoms for MACE's E0s (same settings as step 2, plus
+# dft step 3: isolated atoms for MACE's E0s (same settings as step 2, plus
 # spin polarization -- free atoms are open shell)
 # --------------------------------------------------------------------------
 
@@ -110,3 +94,19 @@ ATOM_VASP_CHANGES = dict(       # applied on top of SP_VASP
 )
 ATOM_SLURM_TASKS = 16
 ATOM_SLURM_TIME = "02:00:00"
+
+# --------------------------------------------------------------------------
+# dft step 4: training set from the finished single points
+# --------------------------------------------------------------------------
+
+TRAIN_SPLIT_BY = "config"       # "config": each config at random; "run": whole Sella runs
+TRAIN_VALID_FRACTION = 0.1      # share going to valid   <- set your proportions here
+TRAIN_TEST_FRACTION = 0.1       # share going to test       (the rest is train)
+TRAIN_HOLDOUT_REACTIONS = []    # e.g. [6]: these reactions go to test entirely
+TRAIN_SEED = 0                  # fixes the random draw (same seed = same split)
+TRAIN_MAX_FORCE = 20.0          # eV/A, configs with any larger DFT force are dropped
+TRAIN_ROUNDS = None             # None: every round under DFT_sp; or ("round1", "round2")
+TRAIN_SOURCES = None            # None: every source; or ("sella", "neb")
+TRAIN_KEEP_SPLITS = {           # earlier split.csv to honour: {prefix: path}, both under DFT_sp
+    "round1/sella": "round1/training_round1/split.csv",
+}

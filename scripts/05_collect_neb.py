@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Step 9 -- collect the initial state, TS and final state of every guess
+"""Step 5 -- collect the initial state, TS and final state of every guess
 that has all three into NEB/, and list the activation energies they give.
 
 A guess is collected only when
@@ -16,12 +16,12 @@ A guess is collected only when
     <RUN_DIR>/NEB/barriers.csv   one row per collected guess
     <RUN_DIR>/NEB/barriers.png   forward and reverse barriers per reaction
 
-All three structures come from the same step 5 guess, so the atom order
-matches, as NEB needs. Energies are MACE (the model of steps 7 and 8):
+All three structures come from the same step 1 guess, so the atom order
+matches, as NEB needs. Energies are MACE (the model of steps 3 and 4):
 Ea_fwd = E_TS - E_initial, Ea_rev = E_TS - E_final, dE_rxn = E_final -
 E_initial. They are guesses until NEB / DFT confirm the TS.
 
-Then the starting band for step 10, in the same folder:
+Then the starting band for step 6, in the same folder:
 
     <RUN_DIR>/NEB/<i>_rxn/pair_<k>/<stem>/band.traj   IS, NEB_IMAGES_BEFORE images, TS,
                                                        NEB_IMAGES_AFTER images, FS
@@ -201,9 +201,9 @@ def plot_barriers(rows, path, title):
 
 run = layout.RunLayout(settings.RUN_DIR)
 if not os.path.isdir(run.ts_harmonic):
-    sys.exit("%s not found -- run step 7 first" % run.ts_harmonic)
+    sys.exit("%s not found -- run step 3 first" % run.ts_harmonic)
 if not os.path.isdir(run.ts_sella):
-    sys.exit("%s not found -- run step 8 first" % run.ts_sella)
+    sys.exit("%s not found -- run step 4 first" % run.ts_sella)
 
 rows, counts = [], {}
 bands = {"built": 0, "up to date": 0, "started": 0}

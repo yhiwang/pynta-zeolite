@@ -5,17 +5,17 @@
 
 Three sources, chosen with COLLECT_SOURCES in dft/dft_settings.py:
 
-  sella      TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/sella.traj  (step 8)
+  sella      TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/sella.traj  (scripts/04)
              finished runs only (result.json); the end points plus frames in
              between that moved COLLECT_MIN_DISP, at most COLLECT_MAX_FRAMES
-  harmonic   TS_harmonic/<i>_rxn/pair_<k>/<stem>/<state>/  (step 7, initial/final)
+  harmonic   TS_harmonic/<i>_rxn/pair_<k>/<stem>/<state>/  (scripts/03, initial/final)
              finished states only (endpoint.json); the relaxed structure, plus
              frames of <state>.traj when COLLECT_HARMONIC_MAX_FRAMES > 1. Frame 0
-             (the raw step 5 guess, already in sella/raw) is never taken. Only
+             (the raw scripts/01 guess, already in sella/raw) is never taken. Only
              the relaxed structure keeps MACE labels: the trajectory frames of
              the spring stages carry MACE + spring energies.
-  neb        NEB/<i>_rxn/pair_<k>/<stem>/  (steps 9-10)
-             start_band = band.traj (any band step 9 built, no MACE labels),
+  neb        NEB/<i>_rxn/pair_<k>/<stem>/  (scripts/05-06)
+             start_band = band.traj (any band scripts/05 built, no MACE labels),
              final_band = neb_band.traj (finished NEBs only, neb_result.json).
              Images within COLLECT_MIN_DISP of the Sella TS (ts.xyz) are
              skipped -- they are already in sella. The end points of the start

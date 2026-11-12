@@ -49,8 +49,8 @@ BIDENTATE_MAX_SPAN = 3.5        # A, longest O-O distance that counts as a site 
 SITE_RULE = "all"
 
 # --------------------------------------------------------------------------
-# shared by the job steps: the dry-run switch (steps 7, 8, 10, 12 and 14),
-# the MACE model and the memory of a MACE job (steps 7, 8 and 10)
+# shared by the job steps: the dry-run switch (steps 3, 4, 6, 8 and 10),
+# the MACE model and the memory of a MACE job (steps 3, 4 and 6)
 # --------------------------------------------------------------------------
 
 SUBMIT = True                   # False: write job dirs + job.sh only (dry run)
@@ -60,7 +60,7 @@ SUBMIT = True                   # False: write job dirs + job.sh only (dry run)
 # MACE_MODEL = os.environ.get(
 #     "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa-0-medium.model"))
 
-# the model steps 07-10 sample with: the fine-tuned model of the previous
+# the model steps 03-06 sample with: the fine-tuned model of the previous
 # round (copy it into models/ and change this line when a round ends)
 MACE_MODEL = os.environ.get(
     "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa0-ft-MOR_T4-round2-e1f10.model"))
@@ -68,7 +68,7 @@ MACE_MODEL = os.environ.get(
 SLURM_MEMORY = "16G"
 
 # --------------------------------------------------------------------------
-# step 5: TS guesses from the reaction graph
+# step 1: TS guesses from the reaction graph
 # --------------------------------------------------------------------------
 
 TS_MAX_SPAN = 3.5               # A, O-O pairs further apart than this are not tried
@@ -81,7 +81,7 @@ TS_BOND_STRETCH = {"form": 1.2, "break": 1.2}   # length factors for changing bo
 TS_CLEARANCE_MIN = 1.5          # A, a guess whose best roll clears less is not written
 
 # --------------------------------------------------------------------------
-# step 6: filtering the TS guesses
+# step 2: filtering the TS guesses
 # --------------------------------------------------------------------------
 
 TS_RMSD_THRESHOLD = 2.0         # A, guesses closer than this (adsorbate RMSD, same
@@ -93,7 +93,7 @@ TS_KEEP_PER_DIRECTION = None    # cap on clusters kept per pair and direction, o
                                 # of flip0 and of flip1
 
 # --------------------------------------------------------------------------
-# step 7: harmonic pre-relax of the TS guesses (one SLURM job per guess;
+# step 3: harmonic pre-relax of the TS guesses (one SLURM job per guess;
 # SUBMIT, MACE_MODEL and memory from the shared block above; PYTHON, account
 # and partition from machine.py)
 # --------------------------------------------------------------------------
@@ -124,18 +124,18 @@ TS_HARMONIC_SLURM_CORES = 4
 TS_HARMONIC_SLURM_TIME = "01:00:00"
 
 # --------------------------------------------------------------------------
-# step 8: Sella saddle search on the TS guesses (one SLURM job per guess and
+# step 4: Sella saddle search on the TS guesses (one SLURM job per guess and
 # start; SUBMIT, MACE_MODEL and memory from the shared block above; PYTHON,
 # account and partition from machine.py)
 # --------------------------------------------------------------------------
 
 TS_SELLA_REACTIONS = None       # None: every reaction in TS_harmonic; or e.g. [0, 3]
-TS_SELLA_STARTS = ("harmonic", "raw")   # "harmonic": step 7's ts_harmonic.xyz,
-                                # "raw": the unrelaxed step 5 guess; drop one to skip it
+TS_SELLA_STARTS = ("harmonic", "raw")   # "harmonic": step 3's ts_harmonic.xyz,
+                                # "raw": the unrelaxed step 1 guess; drop one to skip it
 TS_SELLA_FMAX = 0.05            # eV/A, converged when every free atom is below this
 TS_SELLA_STEPS = 300            # Sella steps at most
 TS_SELLA_INTERNAL = False       # Sella internal coordinates; try True if Cartesian stalls
-TS_SELLA_FREE_RADIUS = TS_HARMONIC_FRAMEWORK_RADIUS   # A, the same region step 7 relaxed
+TS_SELLA_FREE_RADIUS = TS_HARMONIC_FRAMEWORK_RADIUS   # A, the same region step 3 relaxed
 TS_SELLA_VIB_DELTA = 0.01       # A, finite-difference step of the frequency check
 TS_SELLA_IMAG_CUTOFF = 50.0     # cm-1, smaller imaginary modes count as noise
 TS_SELLA_MODE_MIN = 0.2         # the one imaginary mode must stretch a reacting bond by
@@ -144,7 +144,7 @@ TS_SELLA_SLURM_CORES = 4
 TS_SELLA_SLURM_TIME = "03:00:00"
 
 # --------------------------------------------------------------------------
-# step 9: the starting band for the NEB (built on the login node, next to
+# step 5: the starting band for the NEB (built on the login node, next to
 # initial.xyz / ts.xyz / final.xyz in NEB/.../<stem>/)
 # --------------------------------------------------------------------------
 
@@ -158,14 +158,14 @@ NEB_FREE_RADIUS = TS_HARMONIC_FRAMEWORK_RADIUS   # A, framework atoms this close
 # has not been submitted yet; bands with a job.id or a result are left alone
 
 # --------------------------------------------------------------------------
-# step 10: climbing-image NEB with MACE (one SLURM job per guess; SUBMIT,
+# step 6: climbing-image NEB with MACE (one SLURM job per guess; SUBMIT,
 # MACE_MODEL and memory from the shared block above; PYTHON, account and
 # partition from machine.py)
 # --------------------------------------------------------------------------
 
 NEB_REACTIONS = None            # None: every reaction in NEB/; or e.g. [0, 3]
 NEB_MAX_PER_REACTION = None     # submit only the N lowest-barrier guesses of each
-                                # reaction (Ea_fwd from step 9), or None for all
+                                # reaction (Ea_fwd from step 5), or None for all
 NEB_RELAX_ENDPOINTS = True      # relax IS and FS once more with the band's free atoms
                                 # and this model before the NEB (to NEB_FMAX)
 NEB_SPRING = 0.1                # eV/A^2, spring constant between images
@@ -185,7 +185,7 @@ NEB_SLURM_CORES = 4
 NEB_SLURM_TIME = "12:00:00"
 
 # --------------------------------------------------------------------------
-# step 11: collect the NEB TSs for DFT (login node, submits nothing)
+# step 7: collect the NEB TSs for DFT (login node, submits nothing)
 # --------------------------------------------------------------------------
 
 TS_COLLECT_VERDICTS = ("connected", "different_ts")   # neb_result.json verdicts to collect
@@ -194,7 +194,7 @@ TS_DUPLICATE_RMSD = 0.1         # A, adsorbate RMSD below which two TSs of a rea
 TS_DUPLICATE_ENERGY = 0.02      # eV, ... and energy gap below which they are the same TS
 
 # --------------------------------------------------------------------------
-# step 12: DFT Sella on the TSs step 11 collected (one SLURM job per TS;
+# step 8: DFT Sella on the TSs step 7 collected (one SLURM job per TS;
 # VASP settings, module, POTCARs, account, partition, cores and memory from
 # dft/dft_settings.py, so the energies match the training data)
 # --------------------------------------------------------------------------
@@ -208,16 +208,16 @@ DFT_SELLA_LANES = 8             # at most this many running at once (None: no li
 DFT_SELLA_SLURM_TIME = "24:00:00"   # a job that runs out continues with --resume
 
 # --------------------------------------------------------------------------
-# step 13: collect the converged DFT Sella TSs into quasi_irc/ (login node,
+# step 9: collect the converged DFT Sella TSs into quasi_irc/ (login node,
 # submits nothing; no settings)
-# step 14: DFT vibrations at those TSs: the adsorbate, the site Al and its
+# step 10: DFT vibrations at those TSs: the adsorbate, the site Al and its
 # four O vibrate (one SLURM job per TS; module, POTCARs, account, partition,
-# cores and memory as in step 12)
+# cores and memory as in step 8)
 # --------------------------------------------------------------------------
 
 DFT_VIB_DELTA = 0.02            # A, finite-difference step (as in the lab's IBRION=5 runs)
 DFT_VIB_IMAG_CUTOFF = TS_SELLA_IMAG_CUTOFF   # cm-1, smaller imaginary modes count as noise
-DFT_VIB_VASP_CHANGES = dict(lwave=True)   # on top of SP_VASP, the settings step 12 found
+DFT_VIB_VASP_CHANGES = dict(lwave=True)   # on top of SP_VASP, the settings step 8 found
                                 # the TS with: each displacement starts from the last WAVECAR
 DFT_VIB_KEEP_WAVECAR = False    # False: job.sh deletes WAVECAR and the other big VASP files
                                 # after every job, finished or failed (not after a time-out)

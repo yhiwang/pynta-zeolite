@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Table of the DFT Sella runs (step 12): one column per reaction, one row per
+"""Table of the DFT Sella runs (step 8): one column per reaction, one row per
 O pair (ordered oxygens, as in neb_barriers_table). The cell is
 
     dE = E(end) - E(start)   (eV)

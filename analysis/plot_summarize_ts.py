@@ -12,7 +12,7 @@ directory (see analysis/ts_summary.py).
     python summarize_ts.py --reasons   # colored by verdict (why no TS)
 
 Runs on the login node in seconds and submits nothing; run it again whenever
-more step 8 jobs have finished. Starts without result.json yet show as
+more step 4 jobs have finished. Starts without result.json yet show as
 "no result yet" ("job failed" when their job.err has a traceback).
 """
 
@@ -26,7 +26,7 @@ from ts_summary import LABELS, VERDICTS, collect, plot_summary, verdict_counts, 
 
 run = layout.RunLayout(settings.RUN_DIR)
 if not os.path.isdir(run.ts_sella):
-    sys.exit("%s not found -- run step 8 first" % run.ts_sella)
+    sys.exit("%s not found -- run step 4 first" % run.ts_sella)
 
 files = {"info": layout.REACTION_INFO, "bonds": layout.TS_BONDS_JSON,
          "start": layout.TS_START, "end": layout.TS_SELLA_STRUCTURE,

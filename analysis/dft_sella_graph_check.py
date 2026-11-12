@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""TS graph check of the DFT Sella runs (step 12): do the start and the end of
+"""TS graph check of the DFT Sella runs (step 8): do the start and the end of
 every run still have the connectivity of the reaction's TS graph?
 
     start   frame 0 of the first trajectory part (sella.0.traj after a resume,
@@ -12,7 +12,7 @@ run folder as DFT_TS) when
       r < DFT_SELLA_BOND_CUTOFF x (r_i + r_j), r = ASE covalent radius
     - every forming/breaking bond is partly bonded:
       r < DFT_SELLA_BOND_CUTOFF x (r_i + r_j) + DFT_SELLA_TS_BOND_TOLERANCE
-    - no other pair with an adsorbate atom is bonded (step 7's
+    - no other pair with an adsorbate atom is bonded (step 3's
       adsorbate_bonds, which checks every adsorbate atom against every atom)
 
 Graph verdict of a TS:
@@ -124,7 +124,7 @@ _graphs = {}
 
 
 def ts_graph(ts_unique_dir, index):
-    """TSGraph of one reaction from TS_unique/<i>_rxn/info.json (as step 7)."""
+    """TSGraph of one reaction from TS_unique/<i>_rxn/info.json (as step 3)."""
     if (ts_unique_dir, index) not in _graphs:
         folders = {int(name.split("_")[0]): path
                    for name, path in layout.species_dirs(ts_unique_dir)

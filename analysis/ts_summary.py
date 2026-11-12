@@ -12,7 +12,7 @@
                      D  TS energies within each reaction, relative to that
                         reaction's lowest TS
 
-Everything is read from the files steps 5-8 leave behind (info.json,
+Everything is read from the files steps 1-4 leave behind (info.json,
 ts_bonds.json, start.xyz, ts_sella.xyz, result.json), so nothing depends on
 the reaction, framework or site rule. A start whose job has not written
 result.json yet is a row with verdict "pending" ("failed" when its job.err
@@ -24,7 +24,7 @@ grey while a job has no result yet). ``reasons=True`` (summarize_ts.py
 always holds the full verdict.
 
 Bond lengths are normalised by the sum of the ASE covalent radii,
-r / (r_i + r_j): 1 is bonded, ~1.2 the step 7 spring target, >2 apart.
+r / (r_i + r_j): 1 is bonded, ~1.2 the step 3 spring target, >2 apart.
 """
 
 import csv

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-"""DFT step 4: isolated-atom single points, the E0s MACE needs.
+"""DFT step 3: isolated-atom single points, the E0s MACE needs.
 
-    python dft/04_isolated_atoms.py      # ATOM_SUBMIT = False: write inputs + job.sh only
+    python dft/03_isolated_atoms.py      # ATOM_SUBMIT = False: write inputs + job.sh only
 
 One job per element in ATOM_ELEMENTS, in ``<RUN_DIR>/DFT_atoms/<element>/``:
 a single atom in an ATOM_BOX vacuum box, with the step 2 settings (SP_VASP)
@@ -10,7 +10,7 @@ every atom sits in its ground spin state. The D3 term is zero for a single
 atom, so keeping IVDW changes nothing but keeps the settings identical.
 
 Same bookkeeping as step 2 (job.id guard; done / in the queue / failed).
-Step 3 picks the finished atoms up and adds them to train.extxyz as
+Step 4 picks the finished atoms up and adds them to train.extxyz as
 ``config_type=IsolatedAtom``, which is where MACE reads its E0s from.
 """
 

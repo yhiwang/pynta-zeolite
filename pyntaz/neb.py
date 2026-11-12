@@ -132,7 +132,7 @@ class ImageCalculator(Calculator):
 def relax_endpoint(atoms, calc, fmax=FMAX, steps=STEPS_ROUGH, logfile=None):
     """BFGS on an end point in place, with whatever FixAtoms it carries.
 
-    Step 7 relaxed each end point with its own free region; the band frees
+    Step 3 relaxed each end point with its own free region; the band frees
     the union of all three, and the model may have changed since. Without
     this, the images next to an end point relax framework atoms the end
     point never could and drop below it, which reads as an intermediate.

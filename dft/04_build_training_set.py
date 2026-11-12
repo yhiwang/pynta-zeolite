@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-"""DFT step 3: turn the finished single points into MACE training files.
+"""DFT step 4: turn the finished single points into MACE training files.
 
-    python dft/03_build_training_set.py
+    python dft/04_build_training_set.py
 
 For every ``<RUN_DIR>/DFT_sp/<round>/<source>/.../<config>/`` with a finished
 OUTCAR, the config is written with its DFT labels under the names MACE
@@ -56,7 +56,7 @@ from ase.io import read, write
 from vasp_io import finished, read_dft, scf_converged
 
 TRAINING_DIR = "training"           # DFT_sp/ (folders starting with this are skipped)
-ATOMS_DIR = "DFT_atoms"             # <RUN_DIR>/DFT_atoms/<element>/, dft step 4
+ATOMS_DIR = "DFT_atoms"             # <RUN_DIR>/DFT_atoms/<element>/, dft step 3
 TRAIN_FILE = "train.extxyz"
 VALID_FILE = "valid.extxyz"
 TEST_FILE = "test.extxyz"
@@ -110,7 +110,7 @@ def labelled(relative, folder):
 
 def isolated_atoms(run_dir):
     """{element: atoms with REF_energy, config_type=IsolatedAtom} for every
-    finished, converged dft step 4 job."""
+    finished, converged dft step 3 job."""
     found = {}
     root = os.path.join(run_dir, ATOMS_DIR)
     if not os.path.isdir(root):
@@ -199,7 +199,7 @@ def main():
         data[which].append(atoms)
         split_rows.append({"config": relative, "set": which, "reason": reason})
 
-    # isolated atoms (dft step 4) go to train only: MACE takes its E0s from
+    # isolated atoms (dft step 3) go to train only: MACE takes its E0s from
     # every config_type=IsolatedAtom in the training file
     atoms_e0 = isolated_atoms(settings.RUN_DIR)
     data["train"] += list(atoms_e0.values())
@@ -236,7 +236,7 @@ def main():
     print("isolated atoms in train: %s" % (", ".join(
         "%s %.4f eV" % (e, a.info["REF_energy"]) for e, a in atoms_e0.items()) or "none"))
     if missing:
-        print("  missing E0 for %s -- run dft/04_isolated_atoms.py (or train with "
+        print("  missing E0 for %s -- run dft/03_isolated_atoms.py (or train with "
               "--E0s=estimated)" % ", ".join(missing))
     for reason, n in sorted(dropped.items()):
         print("dropped %4d  %s" % (n, reason))

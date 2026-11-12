@@ -32,7 +32,7 @@ come from the foundation model -- needed for a non-MP foundation such as
 OMAT-0, because MACE loads the MP file for every pt_train_file name.
 
 E0s come from the config_type=IsolatedAtom structures in train.extxyz (dft
-step 4 + step 3); the script stops if any element in the data lacks one.
+step 3 + step 4); the script stops if any element in the data lacks one.
 
 job.id guards against submitting the same run twice; delete it (and the
 folder's outputs) to start over, or rerun with a new FT_NAME.
@@ -50,7 +50,7 @@ import settings
 from ase.data import chemical_symbols
 from ase.io import read
 
-TRAINING_DIR = "training"                  # DFT_sp/, written by dft step 3
+TRAINING_DIR = "training"                  # DFT_sp/, written by dft step 4
 FILES = {"train_file": "train.extxyz", "valid_file": "valid.extxyz",
          "test_file": "test.extxyz"}
 FT_DIR = "MACE_ft"                         # <RUN_DIR>/MACE_ft/<FT_NAME>/
@@ -121,7 +121,7 @@ def main():
     paths = {key: os.path.join(data_dir, name) for key, name in FILES.items()}
     for path in paths.values():
         if not os.path.isfile(path):
-            sys.exit("%s not found -- run dft/03_build_training_set.py first" % path)
+            sys.exit("%s not found -- run dft/04_build_training_set.py first" % path)
     if fs.FT_REPLAY == "mp":
         replay = REPLAY_CACHE
     else:
@@ -136,8 +136,8 @@ def main():
                  "scripts/machine.py says?" % machine.FT_MACE_RUN_TRAIN)
     missing, n_train = check_e0s(paths["train_file"])
     if missing:
-        sys.exit("no IsolatedAtom E0 in train.extxyz for %s -- run dft/04 and then "
-                 "dft/03 again" % ", ".join(missing))
+        sys.exit("no IsolatedAtom E0 in train.extxyz for %s -- run dft/03 and then "
+                 "dft/04 again" % ", ".join(missing))
 
     if fs.FT_FILTER_TYPE_PT not in ("none", "combinations", "exclusive", "inclusive"):
         sys.exit("FT_FILTER_TYPE_PT must be none, combinations, exclusive or inclusive")

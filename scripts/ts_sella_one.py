@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 """Sella saddle search + frequency check of one TS start with MACE. This is
 the worker that job.sh runs inside every TS_sella/.../<start>/ directory
-(step 8 writes the job).
+(step 4 writes the job).
 
     python ts_sella_one.py start.xyz
 
-Reads ts_bonds.json next to the input (copied there by step 8). Writes
+Reads ts_bonds.json next to the input (copied there by step 4). Writes
 next to it:
 
     ts_sella.xyz    where Sella stopped, with MACE energy and forces

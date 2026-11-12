@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Step 5 -- build transition-state guesses straight from the reaction graph.
+"""Step 1 -- build transition-state guesses straight from the reaction graph.
 
 Needs only the saved framework (step 0) and reaction.yaml. For every
 reaction, every oxygen pair within

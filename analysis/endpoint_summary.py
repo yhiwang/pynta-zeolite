@@ -1,4 +1,4 @@
-"""One table and one figure for the initial and final states of step 7
+"""One table and one figure for the initial and final states of step 3
 (used by analysis/summarize_endpoints.py).
 
     collect        walk TS_harmonic/ and return one row per guess
@@ -26,7 +26,7 @@ a job has no result yet); ``reasons=True`` (summarize_endpoints.py --reasons)
 colors by status instead. The CSV always holds the full status.
 
 Bond lengths are normalised by the sum of the ASE covalent radii,
-r / (r_i + r_j): 1 is bonded, above the step 7 bond cutoff (1.25) apart.
+r / (r_i + r_j): 1 is bonded, above the step 3 bond cutoff (1.25) apart.
 """
 
 import csv
@@ -330,7 +330,7 @@ def _panel_energies(ax, rows, reactions):
 def plot_summary(rows, out_path, title, reasons=False, cutoff=1.25):
     """The summary figure (module docstring) for ``rows`` from :func:`collect`.
     ``title`` is the subtitle's run name; ``reasons`` colors by status instead
-    of survived / lost; ``cutoff`` is the step 7 bond cutoff, drawn in C."""
+    of survived / lost; ``cutoff`` is the step 3 bond cutoff, drawn in C."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -338,7 +338,7 @@ def plot_summary(rows, out_path, title, reasons=False, cutoff=1.25):
     from matplotlib.patches import Patch
 
     if not rows:
-        raise ValueError("nothing to plot: no step 7 guesses found")
+        raise ValueError("nothing to plot: no step 3 guesses found")
     reactions = sorted({r["reaction"] for r in rows})
     pairs = sorted({r["pair_label"] for r in rows},
                    key=lambda p: [int(t[1:]) if t[1:].isdigit() else t for t in p.split(" · ")])

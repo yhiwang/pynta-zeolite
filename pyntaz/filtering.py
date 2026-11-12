@@ -1,5 +1,5 @@
 """RMSD deduplication: cluster structures by positional RMSD of the
-adsorbate atoms; the first member of each cluster stands for it. Step 6 uses
+adsorbate atoms; the first member of each cluster stands for it. Step 2 uses
 it on the TS guesses.
 
 The bond-survival test of the old adsorbate branch is in

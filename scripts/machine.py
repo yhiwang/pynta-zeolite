@@ -28,7 +28,7 @@ if MACHINE == "hive":
     GPU_MEMORY = "64G"
     # the mace-ft env's trainer, called directly (mace_ft/01_train.py)
     FT_MACE_RUN_TRAIN = os.path.expanduser("~/.conda/envs/mace-ft/bin/mace_run_train")
-    # VASP (dft/02, dft/04, scripts/12): lines job.sh runs first, the MPI launch
+    # VASP (dft/02, dft/03, scripts/08): lines job.sh runs first, the MPI launch
     # (the binary follows it), CPUs per MPI rank, and the folder with potpaw_PBE/
     VASP_SETUP = ["module load vasp/6.5.1%nvhpc@24.9"]
     VASP_LAUNCH = "mpirun -np $SLURM_NTASKS"

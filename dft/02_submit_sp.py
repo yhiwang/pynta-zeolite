@@ -9,10 +9,10 @@ the same folder:
 
     INCAR POSCAR KPOINTS POTCAR   from SP_VASP in dft/dft_settings.py
     ase-sort.dat                  VASP's element-sorted order -> config order
-                                  (step 3 needs it to map forces back)
+                                  (step 4 needs it to map forces back)
     job.sh                        runs VASP_SETUP, then VASP_BINARY with VASP_LAUNCH,
                                   then, only if the OUTCAR finished, deletes the
-                                  bulky outputs step 3 never reads (POTCAR,
+                                  bulky outputs step 4 never reads (POTCAR,
                                   vasprun.xml, vaspout.h5, DOSCAR, ...), so the
                                   home quota only ever holds the jobs running now
 
@@ -38,7 +38,7 @@ error will just fail again. When squeue cannot be reached nothing counts as
 failed, so nothing is resubmitted.
 
 Runs on the login node. Needs ase only (the POTCARs are concatenated here,
-from VASP_PP_PATH). dft/04 reuses JOB_TEMPLATE with the same format fields,
+from VASP_PP_PATH). dft/03 reuses JOB_TEMPLATE with the same format fields,
 so the template takes no new ones.
 """
 
@@ -62,7 +62,7 @@ STALE_OUTPUTS = ("OUTCAR", "OSZICAR", "CONTCAR", "vasprun.xml", "vaspout.h5",
                  "vasp.out", "job.out")            # plus layout.JOB_ERR
 
 # the cleanup line repeats FINISHED_MARK and lists the files by hand on purpose:
-# dft/04 formats this template with its own fields, so it can take no new ones
+# dft/03 formats this template with its own fields, so it can take no new ones
 JOB_TEMPLATE = """#!/bin/bash
 {header}
 #SBATCH --no-requeue

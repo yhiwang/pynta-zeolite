@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-"""DFT Sella saddle search on one TS that step 11 collected. This is the
+"""DFT Sella saddle search on one TS that step 7 collected. This is the
 worker that job.sh runs inside every DFT_TS/.../<stem>/dft_sella/ folder
-(step 12 writes the job).
+(step 8 writes the job).
 
     python dft_sella_one.py start.xyz
 
-start.xyz is the MACE TS (step 11's ts.xyz) and ts_info.json sits next to
-it (both copied there by step 12). VASP runs through ASE with SP_VASP from
+start.xyz is the MACE TS (step 7's ts.xyz) and ts_info.json sits next to
+it (both copied there by step 8). VASP runs through ASE with SP_VASP from
 dft/dft_settings.py plus DFT_SELLA_VASP_CHANGES (lwave=True, so every Sella
 step restarts from the previous wavefunction), in the vasp/ subfolder.
 Only the band's free atoms move (ts_info.json "free"), the same region the
@@ -25,7 +25,7 @@ to estimate curvature, so it has more frames than steps; sella.log has one
 line per step. All of them are DFT-labelled frames near the saddle.
 
 Resuming: a job stopped by the time limit leaves progress.json without
-result.json. Run again (step 12 --resume): the old sella.traj becomes
+result.json. Run again (step 8 --resume): the old sella.traj becomes
 sella.0.traj (then .1, ...) and the search continues from the last accepted
 step, with the WAVECAR still in vasp/. DFT_SELLA_STEPS counts the steps of
 every part together. Sella's Hessian estimate starts over on each resume.
@@ -37,15 +37,15 @@ MACE one (adsorbate RMSD, largest displacement of any free atom); every
 reacting bond at the MACE TS and the DFT TS.
 
 "converged" means every free atom is below DFT_SELLA_FMAX at a point Sella
-treats as a first-order saddle. It is not yet a checked TS: step 14
-counts its imaginary modes, and step 15's quasi-IRC shows it joins the
+treats as a first-order saddle. It is not yet a checked TS: step 10
+counts its imaginary modes, and step 11's quasi-IRC shows it joins the
 intended initial and final states.
 
-The search itself is step 8's pyntaz.ts_sella.saddle_search, only with VASP
+The search itself is step 4's pyntaz.ts_sella.saddle_search, only with VASP
 as the calculator and the band's free atoms; what this file adds is what a
 days-long DFT search needs and a minutes-long MACE one does not: resuming,
 and no frequency check (finite differences on ~100 free atoms would be ~600
-DFT single points; step 14 runs one on the adsorbate and the site only).
+DFT single points; step 10 runs one on the adsorbate and the site only).
 
 Needs ase, sella and numpy (no MACE); job.sh loads the VASP module and sets
 ASE_VASP_COMMAND and VASP_PP_PATH.

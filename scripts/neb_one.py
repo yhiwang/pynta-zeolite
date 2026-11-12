@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 """Climbing-image NEB with MACE on one band. This is the worker that job.sh
-runs inside every NEB/<i>_rxn/pair_<k>/<stem>/ folder (step 10 writes the
+runs inside every NEB/<i>_rxn/pair_<k>/<stem>/ folder (step 6 writes the
 job).
 
     python neb_one.py band.traj
 
-Reads band.json and neb.json next to the band (step 9 wrote both). Writes
+Reads band.json and neb.json next to the band (step 5 wrote both). Writes
 next to it:
 
     neb.traj          every image of every NEB step, both stages, for ase gui
@@ -17,7 +17,7 @@ next to it:
                       the job as finished
 
 The end points are relaxed once more first (NEB_RELAX_ENDPOINTS), with the
-band's free atoms and this run's model, then held fixed: step 7 relaxed
+band's free atoms and this run's model, then held fixed: step 3 relaxed
 each with its own smaller free region, and an end point that is not a
 minimum in the band's free space makes its neighbour image dip below it.
 The image that starts at the Sella TS is also evaluated before the NEB
@@ -74,7 +74,7 @@ def main(band_path):
 
     images = read(band_path, ":")
     if len(images) != band["n_images"]:
-        sys.exit("%s has %d images, band.json says %d -- rerun step 9"
+        sys.exit("%s has %d images, band.json says %d -- rerun step 5"
                  % (band_path, len(images), band["n_images"]))
     for atoms in images:
         atoms.pbc = True

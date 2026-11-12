@@ -1,16 +1,16 @@
 #!/usr/bin/env python
-"""Step 7 -- mirror TS_unique/ into TS_harmonic/ and submit harmonic relax
+"""Step 3 -- mirror TS_unique/ into TS_harmonic/ and submit harmonic relax
 jobs (see pyntaz/harmonic_relax.py): one job per TS guess and state.
 
 States (settings.TS_HARMONIC_STATES, defined in settings.TS_HARMONIC_MODES)
-all start from the same raw step 5 guess:
+all start from the same raw step 1 guess:
 
     ts        springs on every forming and breaking bond (stretched)
     initial   springs on the breaking bonds only, then a spring-free relax
     final     springs on the forming bonds only, then a spring-free relax
 
 For every reaction in settings.TS_HARMONIC_REACTIONS (None: all of
-TS_unique), and every guess step 6 kept:
+TS_unique), and every guess step 2 kept:
 
     <RUN_DIR>/TS_harmonic/<i>_rxn/info.json                         copied from TS_unique
     <RUN_DIR>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz   copied
@@ -18,7 +18,7 @@ TS_unique), and every guess step 6 kept:
     <RUN_DIR>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/job.sh            ts job
     <RUN_DIR>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/<state>/job.sh    initial / final jobs
 
-The ts job runs in the guess folder itself, where step 8 looks for
+The ts job runs in the guess folder itself, where step 4 looks for
 ts_harmonic.xyz; the other states each get their own subfolder.
 
 ts_bonds.json holds the forming and breaking bonds as atom indices of that
@@ -88,7 +88,7 @@ for name, path in missing_machine_paths():
 if missing_machine_paths():
     sys.exit("fix scripts/settings.py or set the PYNTAZ_* environment variables")
 if not os.path.isdir(run.ts_unique):
-    sys.exit("%s not found -- run steps 5 and 6 first" % run.ts_unique)
+    sys.exit("%s not found -- run steps 1 and 2 first" % run.ts_unique)
 
 n_framework = len(read(os.path.join(settings.RUN_DIR, layout.BARE_XYZ)))
 wanted = settings.TS_HARMONIC_REACTIONS

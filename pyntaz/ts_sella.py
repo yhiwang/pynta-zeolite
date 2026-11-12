@@ -1,4 +1,4 @@
-"""Step 8 of the workflow: Sella saddle search on one TS start with MACE,
+"""Step 4 of the workflow: Sella saddle search on one TS start with MACE,
 then a frequency check of the saddle it finds.
 
     saddle_search     Sella (order 1) with every atom fixed except the
@@ -95,7 +95,7 @@ def frequency_check(atoms, free, bonds, name, delta=VIB_DELTA, imag_cutoff=IMAG_
     cache directory; it is deleted first, because ASE reuses cached
     displacements and stale ones give wrong modes. With ``resume`` the cache
     of an earlier run on the same geometry is kept instead, and only the
-    empty files of displacements that never finished are removed (step 14:
+    empty files of displacements that never finished are removed (step 10:
     a DFT job that ran out of time). Writes the first mode as
     ``<name>.0.traj`` for ase gui.
 

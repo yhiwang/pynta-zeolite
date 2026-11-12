@@ -1,20 +1,20 @@
 #!/usr/bin/env python
-"""Step 13 -- collect every converged DFT Sella TS (step 12) into its own
-quasi_irc/ folder, where step 14 (vibrations) and step 15 (quasi-IRC) run.
+"""Step 9 -- collect every converged DFT Sella TS (step 8) into its own
+quasi_irc/ folder, where step 10 (vibrations) and step 11 (quasi-IRC) run.
 Submits nothing; runs on the login node.
 
-    python scripts/13_collect_quasi_irc.py
+    python scripts/09_collect_quasi_irc.py
 
 Which TSs: every row of DFT_TS/ts_collected.csv whose dft_sella/result.json
 says converged. Per TS, only what the next steps need:
 
     <RUN_DIR>/DFT_TS/<i>_rxn/pair_<k>/<stem>/quasi_irc/start.xyz      copy of dft_sella/ts_dft.xyz
-    <RUN_DIR>/DFT_TS/<i>_rxn/pair_<k>/<stem>/quasi_irc/ts_info.json   copy of step 11's ts_info.json
+    <RUN_DIR>/DFT_TS/<i>_rxn/pair_<k>/<stem>/quasi_irc/ts_info.json   copy of step 7's ts_info.json
 
 Every row reports one of:
 
     collected       start.xyz and ts_info.json written
-    kept            quasi_irc/vib/job.id present (a step 14 job was submitted):
+    kept            quasi_irc/vib/job.id present (a step 10 job was submitted):
                     the folder is never rewritten
     not converged   result.json says not_converged
     no result       no dft_sella/result.json (not submitted, running or stopped)
@@ -54,7 +54,7 @@ def main():
     run = layout.RunLayout(settings.RUN_DIR)
     table = os.path.join(run.dft_ts, layout.TS_COLLECT_CSV)
     if not os.path.isfile(table):
-        sys.exit("%s not found -- run scripts/11_collect_ts.py first" % table)
+        sys.exit("%s not found -- run scripts/07_collect_ts.py first" % table)
     with open(table) as handle:
         rows = list(csv.DictReader(handle))
 
@@ -82,7 +82,7 @@ def main():
                 continue
             if os.path.isfile(os.path.join(target, layout.DFT_VIB_DIR, layout.JOB_ID)):
                 status["kept"] += 1
-                print("  kept           %s  (step 14 job submitted)" % label)
+                print("  kept           %s  (step 10 job submitted)" % label)
                 continue
             os.makedirs(target, exist_ok=True)
             shutil.copy2(os.path.join(sella_dir, layout.DFT_SELLA_STRUCTURE),

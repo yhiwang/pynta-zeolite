@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """Site x site table of how many TS guesses each oxygen pair produced, one
-PNG per reaction, from the info.json step 6 writes.
+PNG per reaction, from the info.json step 2 writes.
 
     <RUN_DIR>/TS_unique/<i>_rxn/pair_counts.png    kept / collected per cell
 
@@ -21,7 +21,7 @@ from plotting import plot_pair_counts
 
 run = layout.RunLayout(settings.RUN_DIR)
 if not os.path.isdir(run.ts_unique):
-    sys.exit("%s not found -- run step 6 first" % run.ts_unique)
+    sys.exit("%s not found -- run step 2 first" % run.ts_unique)
 
 # table axes: every first-shell O of every Al, Al by Al, whatever the site
 # rule -- the rule only decides which cells are X

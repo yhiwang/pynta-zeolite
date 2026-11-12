@@ -13,7 +13,7 @@ framework and a set of reactions written as RMG adjacency lists, pyntaz
 
 Two side stages close the loop: `dft/` runs VASP single points on frames
 from the Sella searches, and `mace_ft/` fine-tunes the MACE foundation model
-on them; the pipeline then reruns steps 7–8 with the fine-tuned model.
+on them; the pipeline then reruns steps 3–4 with the fine-tuned model.
 
 The pipeline and the DFT single points run on CPU nodes; MACE fine-tuning
 runs on a GPU. All jobs are submitted through SLURM.
@@ -105,7 +105,7 @@ is not interpreted ...` (from ASE reading the cif).
   name instead of a file path; see step 2.
 - **`FileNotFoundError` for the model.** The default fine-tuned model is not
   in the repo; set `PYNTAZ_MODEL` (step 2).
-- **A job was submitted but never finished.** Steps 7, 8 and `dft/` write
+- **A job was submitted but never finished.** Steps 3, 4 and `dft/` write
   `job.id` and skip folders that have one. Check `job.err`, then delete
   `job.id` (or the folder) to resubmit.
 - **`import openmm` fails.** Only `archive/openmm/02_openmm_restrain.py` needs it.
@@ -125,22 +125,22 @@ pynta-zeolite/
 │   ├── adjlist.py        3D geometry from an adjacency list: rings, torsions, X sites
 │   ├── reactions.py      reaction.yaml -> RMG molecules
 │   ├── pynta_mol.py      get_adsorbate / get_name, vendored from pynta
-│   ├── filtering.py      RMSD clustering of the TS guesses             (step 6)
-│   ├── ts_graph.py       TS guesses from the merged reaction graph     (step 5)
-│   ├── harmonic_relax.py staged MACE relax with springs; TS, initial, final  (step 7)
-│   ├── ts_sella.py       Sella saddle search, frequency check, verdict (step 8)
+│   ├── filtering.py      RMSD clustering of the TS guesses             (step 2)
+│   ├── ts_graph.py       TS guesses from the merged reaction graph     (step 1)
+│   ├── harmonic_relax.py staged MACE relax with springs; TS, initial, final  (step 3)
+│   ├── ts_sella.py       Sella saddle search, frequency check, verdict (step 4)
 │   └── geometry.py       neighbor lists, framework/adsorbate split, clashes, RMSD
 ├── scripts/              one script per step, run in order
 │   ├── settings.py       EVERY setting for a run: framework, sites, thresholds, model, SLURM
 │   ├── layout.py         the only file that knows the run-directory layout
-│   ├── 00_build_framework.py ... 14_submit_dft_vib.py
+│   ├── 00_build_framework.py ... 10_submit_dft_vib.py
 │   └── workers and helpers: harmonic_one.py, ts_sella_one.py, neb_one.py,
 │                dft_sella_one.py, dft_vib_one.py (run inside SLURM jobs),
 │                machine.py, archive_round.py
 ├── analysis/             plots and tables from a run; read-only, safe to rerun
-│   ├── plot_pair_counts.py       site x site TS guess counts after step 6
-│   ├── summarize_endpoints.py    endpoint_summary.csv + .png from step 7
-│   ├── summarize_ts.py           ts_summary.csv + .png from step 8
+│   ├── plot_pair_counts.py       site x site TS guess counts after step 2
+│   ├── summarize_endpoints.py    endpoint_summary.csv + .png from step 3
+│   ├── summarize_ts.py           ts_summary.csv + .png from step 4
 │   ├── plot_mace_dft_energy.py   MACE vs DFT energies for DFT_sp/
 │   ├── compare_runs.py           diff two run dirs after a code change
 │   └── plotting.py, ts_summary.py, endpoint_summary.py   code the scripts above use
@@ -150,7 +150,7 @@ pynta-zeolite/
 ├── tests/                standalone checks, print PASS/FAIL
 └── archive/              kept for reference, not run:
     ├── adsorbates/       the adsorbate branch (old steps 1-3): placement, MACE relax, filter
-    ├── openmm/           the test bed steps 7-8 grew out of
+    ├── openmm/           the test bed steps 3-4 grew out of
     └── endpoint_pairs/   the old endpoint-pair TS route
 ```
 
@@ -173,54 +173,75 @@ Output goes to `runs/<CODE>_<SITES>/`.
 python scripts/00_build_framework.py     # bare framework + sites
 
 # transition states
-python scripts/05_build_ts_guesses.py    # TS guesses from reaction.yaml, needs only step 0
-python scripts/06_filter_ts_guesses.py   # distinct TS guesses
+python scripts/01_build_ts_guesses.py    # TS guesses from reaction.yaml, needs only step 0
+python scripts/02_filter_ts_guesses.py   # distinct TS guesses
 python analysis/plot_pair_counts.py      # optional: site x site guess-count table
-python scripts/07_submit_harmonic.py     # harmonic MACE relax: ts, initial, final per guess
+python scripts/03_submit_harmonic.py     # harmonic MACE relax: ts, initial, final per guess
 python analysis/summarize_endpoints.py   # which initial/final states survived (--reasons: why not)
-python scripts/08_submit_ts_sella.py     # Sella from the harmonic and the raw start
+python scripts/04_submit_ts_sella.py     # Sella from the harmonic and the raw start
 python analysis/summarize_ts.py          # which searches found the TS (--reasons: why not)
-python scripts/09_collect_neb.py         # IS / TS / FS per guess into NEB/, barrier table
+python scripts/05_collect_neb.py         # IS / TS / FS per guess into NEB/, barrier table
 ```
 
 TS guesses are built from the reaction graph and the framework alone.
 
-Steps 7 and 8 submit one job per guess (and per state or start). Rerun them
+Steps 3 and 4 submit one job per guess (and per state or start). Rerun them
 once jobs finish: finished folders are skipped, folders with a running job
-(`job.id`) are left alone, and step 8 picks up harmonic starts that were
+(`job.id`) are left alone, and step 4 picks up harmonic starts that were
 still waiting.
 
-- **Step 7** starts every state from the same raw step 5 guess, with springs
+- **Step 3** starts every state from the same raw step 1 guess, with springs
   toward (r_i + r_j) × `mult` (`TS_HARMONIC_MODES`): `ts` pulls every forming
   and breaking bond; `initial` holds only the breaking bonds at bonded
   length, then relaxes spring-free and checks the bonds (`endpoint.json`);
   `final` does the reverse. The relax alternates framework, spectator and
   reacting-atom stages until the energy settles.
-- **Step 8** runs Sella (order 1) from each start in `TS_SELLA_STARTS`, then a
+- **Step 4** runs Sella (order 1) from each start in `TS_SELLA_STARTS`, then a
   finite-difference frequency check. `result.json` gives one verdict: `ts`,
   `not_converged`, `minimum`, `higher_order` or `wrong_mode` (the one
   imaginary mode does not stretch a reacting bond).
-- **Step 9** collects a guess only when both endpoints are ok and at least one
+- **Step 5** collects a guess only when both endpoints are ok and at least one
   start gave `ts` (the lower-energy one if both did). The barriers in
   `barriers.csv` are MACE numbers, guesses until NEB / DFT confirm the TS.
+
+### Step numbers before November 2026
+
+The steps were renumbered when the adsorbate branch (old steps 1-3) moved to
+`archive/`. Older notes and commit messages use the old numbers:
+
+| script | old | new |
+|---|---|---|
+| `build_framework` | 00 | 00 |
+| `build_ts_guesses` | 05 | 01 |
+| `filter_ts_guesses` | 06 | 02 |
+| `submit_harmonic` | 07 | 03 |
+| `submit_ts_sella` | 08 | 04 |
+| `collect_neb` | 09 | 05 |
+| `submit_neb` | 10 | 06 |
+| `collect_ts` | 11 | 07 |
+| `submit_dft_sella` | 12 | 08 |
+| `collect_quasi_irc` | 13 | 09 |
+| `submit_dft_vib` | 14 | 10 |
+| `dft/isolated_atoms` | 04 | 03 |
+| `dft/build_training_set` | 03 | 04 |
 
 ### Run directory
 
 ```
 runs/<CODE>_<SITES>/
 ├── bare.xyz, framework.json, <CODE>_pairs.json                    step 0
-├── TS_guesses/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz             step 5  (+ info.json, sweep.traj)
-├── TS_unique/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz              step 6  (+ info.json, pair_counts.png)
-├── TS_harmonic/<i>_rxn/pair_<k>/<stem>/                           step 7
+├── TS_guesses/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz             step 1  (+ info.json, sweep.traj)
+├── TS_unique/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz              step 2  (+ info.json, pair_counts.png)
+├── TS_harmonic/<i>_rxn/pair_<k>/<stem>/                           step 3
 │   ├── ts_bonds.json, ts_harmonic.{xyz,traj,log}                          ts state
 │   ├── initial/initial.{xyz,traj,log}, endpoint.json                      initial state
 │   └── final/final.{xyz,traj,log}, endpoint.json                          final state
-├── TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/                      step 8  (<start> = harmonic, raw)
+├── TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/                      step 4  (<start> = harmonic, raw)
 │   └── start.xyz, ts_sella.xyz, sella.{traj,log}, vib.0.traj, result.json
-├── NEB/<i>_rxn/pair_<k>/<stem>/{initial,ts,final}.xyz, neb.json   step 9  (+ barriers.csv, .png)
+├── NEB/<i>_rxn/pair_<k>/<stem>/{initial,ts,final}.xyz, neb.json   step 5  (+ barriers.csv, .png)
 ├── DFT_sp/<i>_rxn/pair_<k>/<stem>/<start>/f<frame>/               dft/ 01-02
-├── DFT_sp/training/{train,valid,test}.extxyz, split.csv           dft/ 03
-├── DFT_atoms/<element>/                                           dft/ 04
+├── DFT_atoms/<element>/                                           dft/ 03
+├── DFT_sp/training/{train,valid,test}.extxyz, split.csv           dft/ 04
 └── MACE_ft/<FT_NAME>/                                             mace_ft/ 01
 ```
 
@@ -255,10 +276,10 @@ are the ones you will actually change.
 | `RUN_DIR` | `runs/<CODE>_<SITES>`; a new `CODE` or `SITES` means a new run directory |
 | `REACTIONS` | the reaction file, `reaction.yaml` |
 | `SITE_RULE` | two Al only: `"cross"` (O pairs bridging the two Al) or `"all"` (every first-shell O and pair). Saved in `framework.json` at step 0; never change it inside an existing run |
-| `MACE_MODEL` | model file for steps 7, 8 and 10 (env `PYNTAZ_MODEL`) |
-| `SUBMIT` | `False` writes every job folder and `job.sh` without submitting (dry run); used by steps 7, 8, 10, 12 and 14 |
+| `MACE_MODEL` | model file for steps 3, 4 and 6 (env `PYNTAZ_MODEL`) |
+| `SUBMIT` | `False` writes every job folder and `job.sh` without submitting (dry run); used by steps 3, 4, 6, 8 and 10 |
 
-`SLURM_MEMORY` is shared by steps 7, 8 and 10, which set their own core
+`SLURM_MEMORY` is shared by steps 3, 4 and 6, which set their own core
 count and wall time. The account, partition and env Python come from
 `scripts/machine.py`.
 
@@ -267,19 +288,19 @@ count and wall time. The account, partition and env Python come from
 | step | settings | notes |
 |---|---|---|
 | 0 framework | `SUPERCELL_MIN_LENGTH`, `BIDENTATE_MAX_SPAN` | supercell edge (Å); longest O–O that counts as a site pair |
-| 5 TS guesses | `TS_MAX_SPAN`, `TS_TORSION_STEPS`, `TS_ROLL_STEPS`, `TS_SPAN_TOLERANCE`, `TS_SITE_SCALE_RANGE`, `TS_BOND_STRETCH`, `TS_CLEARANCE_MIN` | sweep size and how strictly a guess must fit its O–O pair |
-| 6 dedup | `TS_RMSD_THRESHOLD`, `TS_KEEP_PER_DIRECTION` | ~0.8 Å merges a 60° tail rotation, ~2 Å also merges C=C swaps; `1` keeps one guess per pair and direction |
-| 7 harmonic | `TS_HARMONIC_REACTIONS`, `TS_HARMONIC_STATES`, `TS_HARMONIC_MODES`, `TS_HARMONIC_K`, `TS_HARMONIC_FRAMEWORK_RADIUS`, `TS_HARMONIC_STEPS`, `TS_HARMONIC_MAX_CYCLES`, `TS_HARMONIC_FREE_STEPS`, `TS_HARMONIC_BOND_CUTOFF` | `TS_HARMONIC_MODES` sets, per state, which bonds get springs and their target (r_i + r_j) × `mult` |
-| 8 Sella | `TS_SELLA_REACTIONS`, `TS_SELLA_STARTS`, `TS_SELLA_FMAX`, `TS_SELLA_STEPS`, `TS_SELLA_INTERNAL`, `TS_SELLA_FREE_RADIUS`, `TS_SELLA_IMAG_CUTOFF`, `TS_SELLA_MODE_MIN` | the last two decide the verdict: imaginary modes below the cutoff are noise; the one real mode must stretch a reacting bond by at least `MODE_MIN` |
+| 1 TS guesses | `TS_MAX_SPAN`, `TS_TORSION_STEPS`, `TS_ROLL_STEPS`, `TS_SPAN_TOLERANCE`, `TS_SITE_SCALE_RANGE`, `TS_BOND_STRETCH`, `TS_CLEARANCE_MIN` | sweep size and how strictly a guess must fit its O–O pair |
+| 2 dedup | `TS_RMSD_THRESHOLD`, `TS_KEEP_PER_DIRECTION` | ~0.8 Å merges a 60° tail rotation, ~2 Å also merges C=C swaps; `1` keeps one guess per pair and direction |
+| 3 harmonic | `TS_HARMONIC_REACTIONS`, `TS_HARMONIC_STATES`, `TS_HARMONIC_MODES`, `TS_HARMONIC_K`, `TS_HARMONIC_FRAMEWORK_RADIUS`, `TS_HARMONIC_STEPS`, `TS_HARMONIC_MAX_CYCLES`, `TS_HARMONIC_FREE_STEPS`, `TS_HARMONIC_BOND_CUTOFF` | `TS_HARMONIC_MODES` sets, per state, which bonds get springs and their target (r_i + r_j) × `mult` |
+| 4 Sella | `TS_SELLA_REACTIONS`, `TS_SELLA_STARTS`, `TS_SELLA_FMAX`, `TS_SELLA_STEPS`, `TS_SELLA_INTERNAL`, `TS_SELLA_FREE_RADIUS`, `TS_SELLA_IMAG_CUTOFF`, `TS_SELLA_MODE_MIN` | the last two decide the verdict: imaginary modes below the cutoff are noise; the one real mode must stretch a reacting bond by at least `MODE_MIN` |
 
-The step 5 values are passed explicitly and some differ from the keyword
+The step 1 values are passed explicitly and some differ from the keyword
 defaults in `pyntaz/ts_graph.py`, so change them here, not there.
 
 ### Common adjustments
 
 | situation | change |
 |---|---|
-| run only some reactions in steps 7–8 | `TS_HARMONIC_REACTIONS` / `TS_SELLA_REACTIONS`, e.g. `[0, 3]` |
+| run only some reactions in steps 3–4 | `TS_HARMONIC_REACTIONS` / `TS_SELLA_REACTIONS`, e.g. `[0, 3]` |
 | too many TS guesses | two Al: `SITE_RULE = "cross"` (new run dir); raise `TS_RMSD_THRESHOLD`; `TS_KEEP_PER_DIRECTION = 1`; lower `TS_TORSION_STEPS` |
 | a reaction gives zero guesses | raise `TS_SPAN_TOLERANCE`, lower `TS_BOND_STRETCH` (long stretched bonds make the X–X span too wide), or widen `TS_SITE_SCALE_RANGE` |
 | endpoints end `not_converged` | raise `TS_HARMONIC_FREE_STEPS` |
@@ -287,7 +308,7 @@ defaults in `pyntaz/ts_graph.py`, so change them here, not there.
 | only one Sella start | `TS_SELLA_STARTS = ("harmonic",)` |
 | switch to a new MACE model | `MACE_MODEL`; rename `TS_harmonic/` and `TS_sella/` first to keep the old results |
 
-Steps 7 and 8 skip anything that already has a result. To redo them with
+Steps 3 and 4 skip anything that already has a result. To redo them with
 new settings, rename or delete `TS_harmonic/` / `TS_sella/` (or the
 affected guess folders) and rerun.
 
@@ -312,8 +333,8 @@ PBE POTCARs. Every script has a dry-run switch (`COLLECT_WRITE`,
 ```bash
 python dft/01_collect_configs.py       # frames from every finished Sella run -> DFT_sp/
 python dft/02_submit_sp.py             # one VASP single point per frame (SP_LANES running at once)
-python dft/04_isolated_atoms.py        # isolated-atom energies, the E0s MACE needs
-python dft/03_build_training_set.py    # finished OUTCARs -> train / valid / test extxyz
+python dft/03_isolated_atoms.py        # isolated-atom energies, the E0s MACE needs
+python dft/04_build_training_set.py    # finished OUTCARs -> train / valid / test extxyz
 python analysis/plot_mace_dft_energy.py   # optional: how far MACE is from DFT
 ```
 
@@ -321,11 +342,11 @@ python analysis/plot_mace_dft_energy.py   # optional: how far MACE is from DFT
   least `COLLECT_MIN_DISP` (at most `COLLECT_MAX_FRAMES` per run), from every
   verdict: failed searches are training data too. MACE energies and forces
   are stored as `mace_energy` / `mace_forces`, never as the reference labels.
-- `02` and `04` report each folder as done, in the queue, failed or
+- `02` and `03` report each folder as done, in the queue, failed or
   submitted; rerun them to check progress.
-- `03` writes `REF_energy` / `REF_forces`, drops unconverged SCFs and
+- `04` writes `REF_energy` / `REF_forces`, drops unconverged SCFs and
   broken geometries, and splits by config or by whole Sella run
-  (`TRAIN_SPLIT_BY`), within each reaction. Run it after `04` has finished
+  (`TRAIN_SPLIT_BY`), within each reaction. Run it after `03` has finished
   so the isolated atoms go into `train.extxyz`; it is safe to rerun as more
   single points finish.
 
@@ -338,7 +359,7 @@ python mace_ft/01_train.py             # FT_SUBMIT = False: config.yaml + job.sh
 ```
 
 Multihead replay fine-tuning of `FT_FOUNDATION` (the original
-`mace-mpa-0-medium`, every round) on `DFT_sp/training/`, which step 3 builds
+`mace-mpa-0-medium`, every round) on `DFT_sp/training/`, which `dft/04` builds
 from every round's DFT data: the DFT data becomes its own head and
 `FT_NUM_SAMPLES_PT` Materials Project structures are replayed alongside, so
 the model keeps its general chemistry. One GPU job on
@@ -347,7 +368,7 @@ the model keeps its general chemistry. One GPU job on
 
 ### Rounds
 
-Sampling (steps 7–10) → DFT (`dft/`) → fine-tune (`mace_ft/`) repeats, each
+Sampling (steps 3–6) → DFT (`dft/`) → fine-tune (`mace_ft/`) repeats, each
 round with the model the previous round produced. `ROUND` in
 `scripts/settings.py` names the round everywhere: `dft/01` writes configs to
 `DFT_sp/<ROUND>/<source>/`, `scripts/archive_round.py` moves `TS_harmonic/`,
@@ -360,14 +381,14 @@ To close a round and start the next one:
 ```bash
 python dft/01_collect_configs.py       # all sources; already-collected folders are skipped
 python dft/02_submit_sp.py             # ... wait for the single points
-python dft/03_build_training_set.py
+python dft/04_build_training_set.py
 python mace_ft/01_train.py             # ... wait for the GPU job
 cp runs/<run>/MACE_ft/ft_<ROUND>_e1f10/ft_<ROUND>_e1f10_cpu.model models/<new name>.model
 python scripts/archive_round.py        # dry run, then MOVE = True
 ```
 
 then in `scripts/settings.py` set `ROUND` to the next name and `MACE_MODEL`
-to the new file, and rerun steps 7–10. `TS_unique/` (steps 5–6) stays: the
+to the new file, and rerun steps 3–6. `TS_unique/` (steps 1–2) stays: the
 guesses do not depend on the model.
 
 ---
@@ -401,7 +422,7 @@ reprotonation and methyl shift (reactions 0–6).
 ## `archive/openmm/` (reference)
 
 The self-contained test bed where the TS refinement was developed before it
-moved into steps 7–8 (`pyntaz/harmonic_relax.py`, `pyntaz/ts_sella.py`).
+moved into steps 3–4 (`pyntaz/harmonic_relax.py`, `pyntaz/ts_sella.py`).
 It builds one guess per reaction on one O pair and runs the staged MACE
 relax and Sella on it, with settings at the top of each script.
 `02_openmm_restrain.py` is the earlier spring-only relax in OpenMM. Use the

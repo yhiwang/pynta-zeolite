@@ -3,16 +3,16 @@ run-directory layout and the file names, so every step finds things the
 same way and changing the layout means changing this file::
 
     <run_dir>/bare.xyz, framework.json, <CODE>_pairs.json        step 0
-    <run_dir>/TS_guesses/<i>_rxn/info.json                       step 5
+    <run_dir>/TS_guesses/<i>_rxn/info.json                       step 1
     <run_dir>/TS_guesses/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz
     <run_dir>/TS_guesses/<i>_rxn/pair_<k>/sweep.traj
-    <run_dir>/TS_unique/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz    step 6
+    <run_dir>/TS_unique/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz    step 2
     <run_dir>/TS_unique/<i>_rxn/pair_counts.png                  analysis/plot_pair_counts.py
-    <run_dir>/TS_harmonic/<i>_rxn/info.json                      step 7
+    <run_dir>/TS_harmonic/<i>_rxn/info.json                      step 3
     <run_dir>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/<stem>_init.xyz, ts_bonds.json
     <run_dir>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/ts_harmonic.*
     <run_dir>/TS_harmonic/<i>_rxn/pair_<k>/<stem>/<state>/<state>.*, endpoint.json   (initial, final)
-    <run_dir>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/start.xyz, ts_bonds.json   step 8
+    <run_dir>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/start.xyz, ts_bonds.json   step 4
     <run_dir>/TS_sella/<i>_rxn/pair_<k>/<stem>/<start>/ts_sella.xyz, sella.*, vib*, result.json
     <run_dir>/TS_sella/ts_summary.csv, ts_summary.png             analysis/summarize_ts.py
     <run_dir>/DFT_sp/<i>_rxn/pair_<k>/<stem>/<start>/f<frame>/config.extxyz, source.json   dft/01
@@ -38,7 +38,7 @@ PAIRS_JSON = "%s_pairs.json"          # unique second-order T pairs of a code
 INITIAL_GUESS_SUFFIX = "_init.xyz"    # <stem>_init.xyz, one per config folder
 JOB_SCRIPT = "job.sh"
 JOB_ERR = "job.err"                   # SLURM stderr of a job
-JOB_ID = "job.id"                     # SLURM id, written by steps 7-8 after sbatch
+JOB_ID = "job.id"                     # SLURM id, written by steps 3-4 after sbatch
 REACTION_INFO = "info.json"           # TS_guesses/<i>_rxn/: reaction + pair manifest
 SWEEP_TRAJECTORY = "sweep.traj"       # every roll of every survivor, for ase gui
 PAIR_TABLE = "pair_counts.png"        # TS_unique/<i>_rxn/: plot_pair_counts.py table
@@ -57,12 +57,12 @@ TS_SUMMARY_CSV = "ts_summary.csv"     # TS_sella/: summarize_ts.py table, one ro
 TS_SUMMARY_PNG = "ts_summary.png"     # TS_sella/: summarize_ts.py figure
 ENDPOINT_SUMMARY_CSV = "endpoint_summary.csv"   # TS_harmonic/: summarize_endpoints.py table, one row per guess
 ENDPOINT_SUMMARY_PNG = "endpoint_summary.png"   # TS_harmonic/: summarize_endpoints.py figure
-NEB_RECORD = "neb.json"               # NEB/.../<stem>/: sources, MACE energies, bonds (step 9)
+NEB_RECORD = "neb.json"               # NEB/.../<stem>/: sources, MACE energies, bonds (step 5)
 NEB_STATES = {"initial": "initial.xyz", "ts": "ts.xyz", "final": "final.xyz"}   # NEB/.../<stem>/
-NEB_BAND = "band.traj"                # NEB/.../<stem>/: starting band, FixAtoms on every image (step 9)
-NEB_BAND_INFO = "band.json"           # NEB/.../<stem>/: how the band was built, free atoms (step 9)
-NEB_RESULT = "neb_result.json"        # NEB/.../<stem>/: written last by the step 10 job
-NEB_TRAJECTORY = "neb.traj"           # NEB/.../<stem>/: every image of every NEB step (step 10)
+NEB_BAND = "band.traj"                # NEB/.../<stem>/: starting band, FixAtoms on every image (step 5)
+NEB_BAND_INFO = "band.json"           # NEB/.../<stem>/: how the band was built, free atoms (step 5)
+NEB_RESULT = "neb_result.json"        # NEB/.../<stem>/: written last by the step 6 job
+NEB_TRAJECTORY = "neb.traj"           # NEB/.../<stem>/: every image of every NEB step (step 6)
 NEB_LOG = "neb.log"                   # NEB/.../<stem>/: endpoint relax + FIRE log, both stages
 NEB_FINAL_BAND = "neb_band.traj"      # NEB/.../<stem>/: the band where the NEB stopped, MACE energy + forces
 NEB_PLOT = "neb.png"                  # NEB/.../<stem>/: energy along the final band
@@ -70,18 +70,18 @@ DFT_CONFIG = "config.extxyz"          # DFT_sp/.../f<frame>/: one structure, MAC
 DFT_SOURCE = "source.json"            # DFT_sp/.../f<frame>/: where the frame came from
 DFT_MANIFEST = "manifest.csv"         # DFT_sp/: one row per collected config
 DFT_ALL_CONFIGS = "all_configs.extxyz"   # DFT_sp/: every collected config, for ase gui
-TS_COLLECT_STATES = {"initial": "initial.xyz", "ts": "ts.xyz", "final": "final.xyz"}  # DFT_TS/.../<stem>/ (step 11)
+TS_COLLECT_STATES = {"initial": "initial.xyz", "ts": "ts.xyz", "final": "final.xyz"}  # DFT_TS/.../<stem>/ (step 7)
 TS_COLLECT_INFO = "ts_info.json"      # DFT_TS/.../<stem>/: reaction, site, bonds, NEB quality, MACE energies
 TS_COLLECT_CSV = "ts_collected.csv"   # DFT_TS/: one row per collected TS, with the ranking
-DFT_SELLA_DIR = "dft_sella"            # DFT_TS/.../<stem>/dft_sella/: the step 12 job runs here
+DFT_SELLA_DIR = "dft_sella"            # DFT_TS/.../<stem>/dft_sella/: the step 8 job runs here
 DFT_SELLA_STRUCTURE = "ts_dft.xyz"     # DFT_TS/.../<stem>/dft_sella/: where Sella stopped, DFT energy + forces
 DFT_SELLA_VASP = "vasp"                # DFT_TS/.../<stem>/dft_sella/vasp/: VASP's files, WAVECAR between steps
 DFT_SELLA_PROGRESS = "progress.json"   # DFT_TS/.../<stem>/dft_sella/: steps so far + last accepted geometry
-QUASI_IRC_DIR = "quasi_irc"           # DFT_TS/.../<stem>/quasi_irc/: start.xyz + ts_info.json (step 13); steps 14-15 run in its subfolders
-DFT_VIB_DIR = "vib"                   # DFT_TS/.../<stem>/quasi_irc/vib/: the step 14 job runs here
+QUASI_IRC_DIR = "quasi_irc"           # DFT_TS/.../<stem>/quasi_irc/: start.xyz + ts_info.json (step 9); steps 10-11 run in its subfolders
+DFT_VIB_DIR = "vib"                   # DFT_TS/.../<stem>/quasi_irc/vib/: the step 10 job runs here
 DFT_VIB_CACHE = "displacements"       # quasi_irc/vib/displacements/: ASE's forces, one file per displacement (kept for --resume)
 DFT_VIB_VASP = "vasp"                 # quasi_irc/vib/vasp/: VASP's files, WAVECAR between displacements
-DFT_VIB_MODE = "mode.xyz"             # quasi_irc/vib/: start.xyz + the first mode as the per-atom array "mode" (step 15)
+DFT_VIB_MODE = "mode.xyz"             # quasi_irc/vib/: start.xyz + the first mode as the per-atom array "mode" (step 11)
 DFT_VIB_BULKY = ("WAVECAR", "CHG", "CHGCAR", "vasprun.xml", "vaspout.h5", "DOSCAR",
                  "EIGENVAL", "PROCAR", "XDATCAR", "PCDAT")   # quasi_irc/vib/vasp/: the big VASP files,
                                        # deleted after every job unless settings.DFT_VIB_KEEP_WAVECAR
@@ -178,13 +178,13 @@ def load_reactions(path):
 
 
 def harmonic_job_dir(config_dir, state):
-    """Folder of one step 7 job: the guess folder itself for "ts" (where
-    step 8 looks), a ``<state>/`` subfolder for any other state."""
+    """Folder of one step 3 job: the guess folder itself for "ts" (where
+    step 4 looks), a ``<state>/`` subfolder for any other state."""
     return config_dir if state == "ts" else os.path.join(config_dir, state)
 
 
 def harmonic_files(state):
-    """(structure, trajectory, log) file names of one step 7 state."""
+    """(structure, trajectory, log) file names of one step 3 state."""
     if state == "ts":
         return TS_HARMONIC_STRUCTURE, TS_HARMONIC_TRAJECTORY, TS_HARMONIC_LOG
     return state + ".xyz", state + ".traj", state + ".log"

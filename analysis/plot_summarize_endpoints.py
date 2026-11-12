@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""One table and one figure for the initial and final states of step 7
+"""One table and one figure for the initial and final states of step 3
 (see analysis/endpoint_summary.py).
 
     <RUN_DIR>/TS_harmonic/endpoint_summary.csv   one row per guess
@@ -13,7 +13,7 @@
 
 A guess survives when both its initial and final state are ok (bond check
 passed, free relax converged). Runs on the login node in seconds and submits
-nothing; run it again whenever more step 7 jobs have finished.
+nothing; run it again whenever more step 3 jobs have finished.
 """
 
 import os
@@ -27,14 +27,14 @@ from endpoint_summary import collect, plot_summary, survivor_counts, write_csv
 
 run = layout.RunLayout(settings.RUN_DIR)
 if not os.path.isdir(run.ts_harmonic):
-    sys.exit("%s not found -- run step 7 first" % run.ts_harmonic)
+    sys.exit("%s not found -- run step 3 first" % run.ts_harmonic)
 
 files = {"info": layout.REACTION_INFO, "bonds": layout.TS_BONDS_JSON,
          "result": layout.ENDPOINT_RESULT, "err": layout.JOB_ERR,
          "guess_suffix": layout.INITIAL_GUESS_SUFFIX}
 rows = collect(run.ts_harmonic, files)
 if not rows:
-    sys.exit("no step 7 guesses under %s" % run.ts_harmonic)
+    sys.exit("no step 3 guesses under %s" % run.ts_harmonic)
 
 csv_path = os.path.join(run.ts_harmonic, layout.ENDPOINT_SUMMARY_CSV)
 png_path = os.path.join(run.ts_harmonic, layout.ENDPOINT_SUMMARY_PNG)

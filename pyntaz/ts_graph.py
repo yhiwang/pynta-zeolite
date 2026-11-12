@@ -1,4 +1,4 @@
-"""Step 5 of the workflow: transition-state guesses built straight from the
+"""Step 1 of the workflow: transition-state guesses built straight from the
 reaction graph, without any relaxed adsorbate.
 
 How it works
