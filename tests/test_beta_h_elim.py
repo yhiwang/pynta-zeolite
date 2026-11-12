@@ -165,7 +165,8 @@ for combo in product(range(sweep.torsion_steps), repeat=len(sweep.torsion_keys))
         scale, span, error = fit_site_scale(
             sweep.adjlist, sweep.site_elements, sweep.n_atoms,
             sweep.site_a, sweep.site_b, sweep.target_a, sweep.target_b,
-            torsions, axial, sweep.bond_scales, sweep.scale_range, sweep.changing)
+            torsions, axial, sweep.bond_scales, sweep.scale_range, sweep.changing,
+            sweep.unlocked)
         spans.append(span)
         if best is None or error < best[3]:
             best = (torsions, axial, scale, error, span)

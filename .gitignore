@@ -30,3 +30,4 @@ archive/openmm/jobs/
 runs*/
 scripts/test.py
 tests/*.xyz
+structures/
