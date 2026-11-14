@@ -1,13 +1,13 @@
 """What this run is and how every step is tuned. Edit here, not in the
-step scripts: which framework and Al sites, which reactions, the sweep
-sizes and thresholds, and the machine the jobs run on.
+step scripts: which model, framework and Al sites, which reactions, the
+sweep sizes and thresholds, and the machine the jobs run on.
 
 The values below equal the defaults inside ``pyntaz``; the scripts pass
-them explicitly so a change here always takes effect. Machine paths can
-also be overridden through the ``PYNTAZ_*`` environment variables.
+them explicitly so a change here always takes effect.
 """
 
 import os
+import sys
 
 from _common import REPO
 
@@ -18,20 +18,41 @@ from _common import REPO
 MACHINE = "hive"
 
 # --------------------------------------------------------------------------
-# the run
+# the run: every site gets its own run directory,
+# runs/<MODEL>/<ROUND>/<FRAMEWORK>/<site> (layout.run_dirs), and steps 0-6
+# loop over every site of FRAMEWORK. Change MODEL or FRAMEWORK for the next
+# submission; the results land in a new folder and nothing has to be moved.
 # --------------------------------------------------------------------------
 
-CODE = "MOR"
-SITES = "T4"       # one T label ("T4") for a single Al, or a pair name
-                           # from the table step 0 prints ("T2-T4_5.65") for two
-RUN_DIR = os.path.join("runs", "%s_%s" % (CODE, SITES))
+# every model: its file in models/ for each round (a *file*: a bare model
+# name makes MACE try to download it, which fails on a compute node without
+# internet), the head of a multi-head model (None = the model's own), and
+# whether D3 dispersion is added on top. D3 is for foundation models only: a
+# model fine-tuned on the RPBE-D3 data already holds the dispersion.
+MODELS = {
+    "mpa0": {"round0": {"file": "mace-mpa-0-medium.model", "head": None, "d3": True}},
+    "omat0": {"round0": {"file": "mace-omat-0-medium.model", "head": None, "d3": True}},
+    "mh1": {"round0": {"file": "mace-mh-1.model", "head": "omat_pbe", "d3": True}},
+}
+MODEL = "mpa0"         # the current model: edit this line per submission
+
+# every framework and its sites: T labels ("T4") for a single Al, or pair
+# names from the table step 0 prints ("T2-T4_5.65") for two Al
+FRAMEWORKS = {
+    "MOR": ["T1", "T2", "T3", "T4"],
+    "MFI": ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12"],
+}
+FRAMEWORK = "MOR"      # the current framework: edit this line per submission
+
+ROUND = "round0"       # the sampling -> DFT -> fine-tune round
 REACTIONS = "reaction.yaml"
 
-# Which sampling -> DFT -> fine-tune round this is. Used by dft/01 (configs go
-# to DFT_sp/<ROUND>/<source>/), scripts/archive_round.py (TS_harmonic,
-# TS_sella, NEB move to <RUN_DIR>/<ROUND>/) and mace_ft (FT_NAME). To start
-# the next round: set ROUND and point MACE_MODEL at the new fine-tuned model.
-ROUND = "round3"
+if MODEL not in MODELS or ROUND not in MODELS[MODEL]:
+    sys.exit("settings.py: no MODELS entry for MODEL = %r, ROUND = %r" % (MODEL, ROUND))
+if FRAMEWORK not in FRAMEWORKS:
+    sys.exit("settings.py: no FRAMEWORKS entry for FRAMEWORK = %r" % FRAMEWORK)
+CODE = FRAMEWORK                # the zeolite code, as the step scripts call it
+SITES = FRAMEWORKS[FRAMEWORK]
 
 # --------------------------------------------------------------------------
 # step 0: framework and sites
@@ -55,15 +76,16 @@ SITE_RULE = "all"
 
 SUBMIT = True                   # False: write job dirs + job.sh only (dry run)
 
-# a model *file*: a bare model name makes MACE try to download it, which
-# fails on a compute node without internet
-# MACE_MODEL = os.environ.get(
-#     "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa-0-medium.model"))
+D3_DAMPING = "bj"               # D3(BJ), as ivdw = 12 in the VASP runs
+D3_XC = "pbe"                   # D3 parameters of the functional the model reproduces
 
-# the model steps 03-06 sample with: the fine-tuned model of the previous
-# round (copy it into models/ and change this line when a round ends)
+# the model of MODEL and ROUND. Every job.sh sets PYNTAZ_JOB_MODEL,
+# PYNTAZ_JOB_HEAD and PYNTAZ_JOB_D3, so a queued job keeps the model it was
+# submitted with even after MODEL is changed for the next submission
 MACE_MODEL = os.environ.get(
-    "PYNTAZ_MODEL", os.path.join(REPO, "models", "mace-mpa0-ft-MOR_T4-round2-e1f10.model"))
+    "PYNTAZ_JOB_MODEL", os.path.join(REPO, "models", MODELS[MODEL][ROUND]["file"]))
+MACE_HEAD = os.environ.get("PYNTAZ_JOB_HEAD", MODELS[MODEL][ROUND]["head"] or "") or None
+MACE_D3 = os.environ.get("PYNTAZ_JOB_D3", "1" if MODELS[MODEL][ROUND]["d3"] else "0") == "1"
 
 SLURM_MEMORY = "16G"
 

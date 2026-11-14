@@ -199,85 +199,90 @@ def plot_barriers(rows, path, title):
     return names
 
 
-run = layout.RunLayout(settings.RUN_DIR)
-if not os.path.isdir(run.ts_harmonic):
-    sys.exit("%s not found -- run step 3 first" % run.ts_harmonic)
-if not os.path.isdir(run.ts_sella):
-    sys.exit("%s not found -- run step 4 first" % run.ts_sella)
-
-rows, counts = [], {}
-bands = {"built": 0, "up to date": 0, "started": 0}
-for reaction_name in subdirs(run.ts_harmonic):
-    head = reaction_name.split("_")[0]
-    if not head.isdigit():
+for site, run_dir in layout.run_dirs(settings.MODEL, settings.ROUND, settings.FRAMEWORK, settings.SITES):
+    print("\n=== %s" % run_dir)
+    run = layout.RunLayout(run_dir)
+    if not os.path.isdir(run.ts_harmonic):
+        print("%s not found -- run step 3 first -- site skipped" % run.ts_harmonic)
         continue
-    index = int(head)
-    info = load(os.path.join(run.ts_harmonic, reaction_name, layout.REACTION_INFO)) or {}
-    count = counts.setdefault(index, {"guesses": 0, "endpoints": 0, "collected": 0})
-    for pair in subdirs(os.path.join(run.ts_harmonic, reaction_name)):
-        for stem in subdirs(os.path.join(run.ts_harmonic, reaction_name, pair)):
-            guess_dir = os.path.join(run.ts_harmonic, reaction_name, pair, stem)
-            record = load(os.path.join(guess_dir, layout.TS_BONDS_JSON))
-            if record is None:
-                continue
-            count["guesses"] += 1
-            initial, final = endpoint(guess_dir, "initial"), endpoint(guess_dir, "final")
-            if not (initial and final):
-                continue
-            count["endpoints"] += 1
-            ts = best_ts(os.path.join(run.ts_sella, reaction_name, pair, stem))
-            if ts is None:
-                continue
-            count["collected"] += 1
-            start, ts_result, ts_path = ts
+    if not os.path.isdir(run.ts_sella):
+        print("%s not found -- run step 4 first -- site skipped" % run.ts_sella)
+        continue
 
-            e_is, e_ts, e_fs = initial[0]["energy"], ts_result["energy"], final[0]["energy"]
-            imaginary = ts_result.get("imaginary") or []
-            relative = os.path.join(reaction_name, pair, stem)
-            rows.append({"reaction": index, "reaction_name": info.get("reaction", reaction_name),
-                         "pair": pair, "stem": stem, "ts_start": start,
-                         "E_initial": e_is, "E_ts": e_ts, "E_final": e_fs,
-                         "Ea_fwd": e_ts - e_is, "Ea_rev": e_ts - e_fs, "dE_rxn": e_fs - e_is,
-                         "imag_cm": imaginary[0] if imaginary else None})
+    rows, counts = [], {}
+    bands = {"built": 0, "up to date": 0, "started": 0}
+    for reaction_name in subdirs(run.ts_harmonic):
+        head = reaction_name.split("_")[0]
+        if not head.isdigit():
+            continue
+        index = int(head)
+        info = load(os.path.join(run.ts_harmonic, reaction_name, layout.REACTION_INFO)) or {}
+        count = counts.setdefault(index, {"guesses": 0, "endpoints": 0, "collected": 0})
+        for pair in subdirs(os.path.join(run.ts_harmonic, reaction_name)):
+            for stem in subdirs(os.path.join(run.ts_harmonic, reaction_name, pair)):
+                guess_dir = os.path.join(run.ts_harmonic, reaction_name, pair, stem)
+                record = load(os.path.join(guess_dir, layout.TS_BONDS_JSON))
+                if record is None:
+                    continue
+                count["guesses"] += 1
+                initial, final = endpoint(guess_dir, "initial"), endpoint(guess_dir, "final")
+                if not (initial and final):
+                    continue
+                count["endpoints"] += 1
+                ts = best_ts(os.path.join(run.ts_sella, reaction_name, pair, stem))
+                if ts is None:
+                    continue
+                count["collected"] += 1
+                start, ts_result, ts_path = ts
 
-            target = os.path.join(run.neb, relative)
-            if not os.path.isfile(os.path.join(target, layout.NEB_RECORD)):
-                collect(target, initial[1], ts_path, final[1], record, relative, index,
-                        rows[-1]["reaction_name"], start, (e_is, e_ts, e_fs), imaginary)
-            outcome = make_band(target, record["n_framework"])
-            bands[outcome] += 1
-            if outcome == "built":
-                print("  band built   %s" % relative)
+                e_is, e_ts, e_fs = initial[0]["energy"], ts_result["energy"], final[0]["energy"]
+                imaginary = ts_result.get("imaginary") or []
+                relative = os.path.join(reaction_name, pair, stem)
+                rows.append({"reaction": index, "reaction_name": info.get("reaction", reaction_name),
+                             "pair": pair, "stem": stem, "ts_start": start,
+                             "E_initial": e_is, "E_ts": e_ts, "E_final": e_fs,
+                             "Ea_fwd": e_ts - e_is, "Ea_rev": e_ts - e_fs, "dE_rxn": e_fs - e_is,
+                             "imag_cm": imaginary[0] if imaginary else None})
 
-print("%-9s %8s %10s %10s   %-8s %7s   %s"
-      % ("reaction", "guesses", "IS+FS ok", "collected", "min Ea", "dE", "lowest-barrier guess"))
-for index in sorted(counts):
-    c = counts[index]
-    part = [r for r in rows if r["reaction"] == index]
-    if part:
-        low = min(part, key=lambda r: r["Ea_fwd"])
-        tail = "%-8.3f %7.3f   %s/%s (%s)" % (low["Ea_fwd"], low["dE_rxn"], low["pair"],
-                                              low["stem"], low["ts_start"])
-    else:
-        tail = "-"
-    print("%-9s %8d %10d %10d   %s" % ("R%d" % index, c["guesses"], c["endpoints"],
-                                       c["collected"], tail))
+                target = os.path.join(run.neb, relative)
+                if not os.path.isfile(os.path.join(target, layout.NEB_RECORD)):
+                    collect(target, initial[1], ts_path, final[1], record, relative, index,
+                            rows[-1]["reaction_name"], start, (e_is, e_ts, e_fs), imaginary)
+                outcome = make_band(target, record["n_framework"])
+                bands[outcome] += 1
+                if outcome == "built":
+                    print("  band built   %s" % relative)
 
-if not rows:
-    sys.exit("\nno guess has a valid IS, TS and FS yet -- nothing collected")
-os.makedirs(run.neb, exist_ok=True)
-rows.sort(key=lambda r: (r["reaction"], r["Ea_fwd"]))
-csv_path = os.path.join(run.neb, BARRIERS_CSV)
-with open(csv_path, "w", newline="") as handle:
-    writer = csv.DictWriter(handle, fieldnames=COLUMNS, extrasaction="ignore")
-    writer.writeheader()
-    for row in rows:
-        writer.writerow({k: (round(v, 4) if isinstance(v, float) else v) for k, v in row.items()})
-png_path = os.path.join(run.neb, BARRIERS_PNG)
-plot_barriers(rows, png_path, os.path.relpath(settings.RUN_DIR))
-print("\nenergies in eV (MACE); min Ea = lowest E_TS - E_IS of that reaction, dE = its E_FS - E_IS")
-print("bands: %d built, %d up to date, %d left alone (NEB submitted or done)   "
-      "[%d + %d images around the TS, %s]"
-      % (bands["built"], bands["up to date"], bands["started"], settings.NEB_IMAGES_BEFORE,
-         settings.NEB_IMAGES_AFTER, settings.NEB_INTERPOLATION))
-print("collected into %s\nwrote %s\n      %s" % (run.neb, csv_path, png_path))
+    print("%-9s %8s %10s %10s   %-8s %7s   %s"
+          % ("reaction", "guesses", "IS+FS ok", "collected", "min Ea", "dE", "lowest-barrier guess"))
+    for index in sorted(counts):
+        c = counts[index]
+        part = [r for r in rows if r["reaction"] == index]
+        if part:
+            low = min(part, key=lambda r: r["Ea_fwd"])
+            tail = "%-8.3f %7.3f   %s/%s (%s)" % (low["Ea_fwd"], low["dE_rxn"], low["pair"],
+                                                  low["stem"], low["ts_start"])
+        else:
+            tail = "-"
+        print("%-9s %8d %10d %10d   %s" % ("R%d" % index, c["guesses"], c["endpoints"],
+                                           c["collected"], tail))
+
+    if not rows:
+        print("\nno guess has a valid IS, TS and FS yet -- nothing collected -- site skipped")
+        continue
+    os.makedirs(run.neb, exist_ok=True)
+    rows.sort(key=lambda r: (r["reaction"], r["Ea_fwd"]))
+    csv_path = os.path.join(run.neb, BARRIERS_CSV)
+    with open(csv_path, "w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=COLUMNS, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: (round(v, 4) if isinstance(v, float) else v) for k, v in row.items()})
+    png_path = os.path.join(run.neb, BARRIERS_PNG)
+    plot_barriers(rows, png_path, os.path.relpath(run_dir))
+    print("\nenergies in eV (MACE); min Ea = lowest E_TS - E_IS of that reaction, dE = its E_FS - E_IS")
+    print("bands: %d built, %d up to date, %d left alone (NEB submitted or done)   "
+          "[%d + %d images around the TS, %s]"
+          % (bands["built"], bands["up to date"], bands["started"], settings.NEB_IMAGES_BEFORE,
+             settings.NEB_IMAGES_AFTER, settings.NEB_INTERPOLATION))
+    print("collected into %s\nwrote %s\n      %s" % (run.neb, csv_path, png_path))

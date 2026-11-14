@@ -38,10 +38,18 @@ JOB_TEMPLATE = """#!/bin/bash
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export PYTHONPATH=%(repo)s:$PYTHONPATH
+# the model this job was submitted with (settings.py reads these)
+export PYNTAZ_JOB_MODEL=%(model)s
+export PYNTAZ_JOB_HEAD=%(head)s
+export PYNTAZ_JOB_D3=%(d3)s
 
 # the env python directly: `conda activate` fails silently in batch jobs
 %(python)s %(worker)s %(band)s
 """
+
+# written into every job.sh, so a queued job keeps its model
+MODEL_FIELDS = {"model": settings.MACE_MODEL, "head": settings.MACE_HEAD or "",
+                "d3": "1" if settings.MACE_D3 else "0"}
 
 
 def job_script(name):
@@ -49,7 +57,7 @@ def job_script(name):
                                                      settings.SLURM_MEMORY,
                                                      settings.NEB_SLURM_TIME, name=name),
                            "repo": _common.REPO, "python": machine.PYTHON,
-                           "worker": WORKER, "band": layout.NEB_BAND}
+                           "worker": WORKER, "band": layout.NEB_BAND, **MODEL_FIELDS}
 
 
 def load(path):
@@ -80,73 +88,75 @@ def missing_machine_paths():
             if not os.path.exists(path)]
 
 
-run = layout.RunLayout(settings.RUN_DIR)
-
 for name, path in missing_machine_paths():
     print("%s does not exist: %s" % (name, path))
 if missing_machine_paths():
-    sys.exit("fix scripts/settings.py or set the PYNTAZ_* environment variables")
-if not os.path.isdir(run.neb):
-    sys.exit("%s not found -- run step 5 first" % run.neb)
+    sys.exit("fix scripts/settings.py or scripts/machine.py")
 
-wanted = settings.NEB_REACTIONS
-cap = settings.NEB_MAX_PER_REACTION
-print("%s: reactions %s, %s per reaction, model %s"
-      % (settings.RUN_DIR, "all" if wanted is None else list(wanted),
-         "all guesses" if cap is None else "lowest %d" % cap,
-         os.path.basename(settings.MACE_MODEL)))
-
-keys = ("submit", "done", "queued", "capped")
-totals = dict.fromkeys(keys, 0)
-verdicts = {}
-for reaction_name, reaction_dir in layout.species_dirs(run.neb):
-    head = reaction_name.split("_")[0]
-    if not head.isdigit():
+for site, run_dir in layout.run_dirs(settings.MODEL, settings.ROUND, settings.FRAMEWORK, settings.SITES):
+    run = layout.RunLayout(run_dir)
+    if not os.path.isdir(run.neb):
+        print("%s not found -- run step 5 first -- site skipped" % run.neb)
         continue
-    index = int(head)
-    if wanted is not None and index not in wanted:
-        continue
-    print("\n%s" % reaction_name)
-    counts = dict.fromkeys(keys, 0)
-    for rank, (relative, folder, record) in enumerate(guesses(reaction_dir)):
-        label = "%s  (Ea %.3f eV)" % (relative, record["Ea_fwd"])
-        result = load(os.path.join(folder, layout.NEB_RESULT))
-        if result is not None:
-            print("  already done   %s  -> %s" % (label, result["verdict"]))
-            verdicts[result["verdict"]] = verdicts.get(result["verdict"], 0) + 1
-            counts["done"] += 1
-            continue
-        if os.path.exists(os.path.join(folder, layout.JOB_ID)):
-            with open(os.path.join(folder, layout.JOB_ID)) as handle:
-                print("  in the queue   %s  (job %s, no result yet)" % (label, handle.read().strip()))
-            counts["queued"] += 1
-            continue
-        if cap is not None and rank >= cap:
-            counts["capped"] += 1
-            continue
 
-        with open(os.path.join(folder, layout.JOB_SCRIPT), "w") as handle:
-            handle.write(job_script("neb%d_%s" % (index, relative.split(os.sep)[0][-2:])))
-        if settings.SUBMIT:
-            out = subprocess.run(["sbatch", "--chdir=" + folder, layout.JOB_SCRIPT],
-                                 capture_output=True, text=True)
-            print("  %s -> %s" % (label, out.stdout.strip() or out.stderr.strip()))
-            if out.returncode != 0:
-                sys.exit("sbatch failed, stopping")
-            with open(os.path.join(folder, layout.JOB_ID), "w") as handle:
-                handle.write(out.stdout.strip().split()[-1] + "\n")
-        else:
-            print("  would submit   %s" % label)
-        counts["submit"] += 1
+    wanted = settings.NEB_REACTIONS
+    cap = settings.NEB_MAX_PER_REACTION
+    print("%s: reactions %s, %s per reaction, model %s"
+          % (run_dir, "all" if wanted is None else list(wanted),
+             "all guesses" if cap is None else "lowest %d" % cap,
+             os.path.basename(settings.MACE_MODEL)))
 
-    print("  %d %s, %d already done, %d in the queue, %d over NEB_MAX_PER_REACTION"
-          % (counts["submit"], "submitted" if settings.SUBMIT else "to submit",
-             counts["done"], counts["queued"], counts["capped"]))
-    for key in keys:
-        totals[key] += counts[key]
+    keys = ("submit", "done", "queued", "capped")
+    totals = dict.fromkeys(keys, 0)
+    verdicts = {}
+    for reaction_name, reaction_dir in layout.species_dirs(run.neb):
+        head = reaction_name.split("_")[0]
+        if not head.isdigit():
+            continue
+        index = int(head)
+        if wanted is not None and index not in wanted:
+            continue
+        print("\n%s" % reaction_name)
+        counts = dict.fromkeys(keys, 0)
+        for rank, (relative, folder, record) in enumerate(guesses(reaction_dir)):
+            label = "%s  (Ea %.3f eV)" % (relative, record["Ea_fwd"])
+            result = load(os.path.join(folder, layout.NEB_RESULT))
+            if result is not None:
+                print("  already done   %s  -> %s" % (label, result["verdict"]))
+                verdicts[result["verdict"]] = verdicts.get(result["verdict"], 0) + 1
+                counts["done"] += 1
+                continue
+            if os.path.exists(os.path.join(folder, layout.JOB_ID)):
+                with open(os.path.join(folder, layout.JOB_ID)) as handle:
+                    print("  in the queue   %s  (job %s, no result yet)" % (label, handle.read().strip()))
+                counts["queued"] += 1
+                continue
+            if cap is not None and rank >= cap:
+                counts["capped"] += 1
+                continue
 
-print("\n%d NEBs %s, %d already done, %d in the queue, %d over the cap  (%s)"
-      % (totals["submit"], "submitted" if settings.SUBMIT else "would be submitted",
-         totals["done"], totals["queued"], totals["capped"], run.neb))
-if verdicts:
-    print("verdicts so far: " + ", ".join("%s %d" % item for item in sorted(verdicts.items())))
+            with open(os.path.join(folder, layout.JOB_SCRIPT), "w") as handle:
+                handle.write(job_script("neb%d_%s" % (index, relative.split(os.sep)[0][-2:])))
+            if settings.SUBMIT:
+                out = subprocess.run(["sbatch", "--chdir=" + folder, layout.JOB_SCRIPT],
+                                     capture_output=True, text=True)
+                print("  %s -> %s" % (label, out.stdout.strip() or out.stderr.strip()))
+                if out.returncode != 0:
+                    sys.exit("sbatch failed, stopping")
+                with open(os.path.join(folder, layout.JOB_ID), "w") as handle:
+                    handle.write(out.stdout.strip().split()[-1] + "\n")
+            else:
+                print("  would submit   %s" % label)
+            counts["submit"] += 1
+
+        print("  %d %s, %d already done, %d in the queue, %d over NEB_MAX_PER_REACTION"
+              % (counts["submit"], "submitted" if settings.SUBMIT else "to submit",
+                 counts["done"], counts["queued"], counts["capped"]))
+        for key in keys:
+            totals[key] += counts[key]
+
+    print("\n%d NEBs %s, %d already done, %d in the queue, %d over the cap  (%s)"
+          % (totals["submit"], "submitted" if settings.SUBMIT else "would be submitted",
+             totals["done"], totals["queued"], totals["capped"], run.neb))
+    if verdicts:
+        print("verdicts so far: " + ", ".join("%s %d" % item for item in sorted(verdicts.items())))

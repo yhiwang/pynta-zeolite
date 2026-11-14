@@ -1,8 +1,11 @@
 #!/usr/bin/env python
-"""Step 0 -- build one bare framework and save it into its run directory.
+"""Step 0 -- build the bare framework of every site and save it into the
+site's run directory.
 
-Set CODE and SITES in settings.py. SITES is one T label ("T4") for a single
-Al or a pair name from the printed table ("T2-T4_5.65") for two Al. With
+Set FRAMEWORK in settings.py; its sites come from FRAMEWORKS. Each site is
+one T label ("T4") for a single Al or a pair name from the printed table
+("T2-T4_5.65") for two Al; each gets its own run directory
+(layout.run_dirs). With
 two Al, SITE_RULE decides whether only the cross pairs (one O on each Al,
 the O-Si-O bridges) and their oxygens become sites ("cross") or every
 first-shell O and pair does ("all"). Writes <RUN_DIR>/bare.xyz,
@@ -20,20 +23,21 @@ print("%d unique second-order pairs in %s:" % (len(pairs), settings.CODE))
 for name, record in pairs.items():
     print("  %-14s indices %-12s %.2f A" % (name, record["indices"], record["distance"]))
 
-if settings.SITES in pairs:
-    record = pairs[settings.SITES]
-    framework = build_framework(settings.CODE, record["t_labels"],
-                                indices=record["indices"],
-                                min_length=settings.SUPERCELL_MIN_LENGTH,
-                                max_span=settings.BIDENTATE_MAX_SPAN,
-                                site_rule=settings.SITE_RULE)
-else:
-    framework = build_framework(settings.CODE, (settings.SITES,),
-                                min_length=settings.SUPERCELL_MIN_LENGTH,
-                                max_span=settings.BIDENTATE_MAX_SPAN,
-                                site_rule=settings.SITE_RULE)
+for site, run_dir in layout.run_dirs(settings.MODEL, settings.ROUND, settings.FRAMEWORK, settings.SITES):
+    if site in pairs:
+        record = pairs[site]
+        framework = build_framework(settings.CODE, record["t_labels"],
+                                    indices=record["indices"],
+                                    min_length=settings.SUPERCELL_MIN_LENGTH,
+                                    max_span=settings.BIDENTATE_MAX_SPAN,
+                                    site_rule=settings.SITE_RULE)
+    else:
+        framework = build_framework(settings.CODE, (site,),
+                                    min_length=settings.SUPERCELL_MIN_LENGTH,
+                                    max_span=settings.BIDENTATE_MAX_SPAN,
+                                    site_rule=settings.SITE_RULE)
 
-print("\n%s" % settings.RUN_DIR)
-print(framework.report())
-layout.save_framework(framework, settings.RUN_DIR)
-layout.save_pairs(pairs, settings.RUN_DIR, settings.CODE)
+    print("\n%s" % run_dir)
+    print(framework.report())
+    layout.save_framework(framework, run_dir)
+    layout.save_pairs(pairs, run_dir, settings.CODE)

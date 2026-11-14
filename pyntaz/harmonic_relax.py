@@ -133,10 +133,15 @@ def spring_targets(atoms, bonds, mult=None):
     return [(i, j, float((radius[i] + radius[j]) * mult[change])) for i, j, change in bonds]
 
 
-def load_mace(model_path, device="cpu"):
-    """MACE calculator from a model *file*, float64."""
+def load_mace(model_path, device="cpu", head=None, d3=False, d3_damping="bj", d3_xc="pbe"):
+    """MACE calculator from a model *file*, float64. ``head`` picks the head
+    of a multi-head model (None = the model's own); ``d3`` adds Grimme D3
+    dispersion with ``d3_damping`` and the ``d3_xc`` parameters on top."""
     from mace.calculators import mace_mp   # heavy import, only when relaxing
-    return mace_mp(model=model_path, default_dtype="float64", device=device)
+    options = {"head": head} if head else {}
+    if d3:
+        options.update(dispersion=True, damping=d3_damping, dispersion_xc=d3_xc)
+    return mace_mp(model=model_path, default_dtype="float64", device=device, **options)
 
 
 # --------------------------------------------------------------------------
@@ -285,7 +290,8 @@ def endpoint_check(start, end, bonds, n_framework, springs, sites=(), cutoff=1.2
 def state_relax(atoms, bonds, n_framework, model_path, springs, mult, free_relax, sites=(),
                 k=K_RESTRAINT, framework_radius=FRAMEWORK_RADIUS, steps=None,
                 max_cycles=MAX_CYCLES, e_tol=E_TOL, fmax=FMAX, free_steps=300,
-                cutoff=1.25, device="cpu", logfile=None, trajectory=None, log=None):
+                cutoff=1.25, device="cpu", logfile=None, trajectory=None, log=None,
+                calc=None):
     """Relax a raw TS guess toward one state, in place.
 
     ``bonds`` are all forming / breaking bonds as (i, j, change). Only those
@@ -312,13 +318,16 @@ def state_relax(atoms, bonds, n_framework, model_path, springs, mult, free_relax
     ended on the wrong side) or "other_bonds" (only some other bond
     changed). Without a free relax nothing is expected and ``verdict`` is
     None.
+
+    ``calc`` is a MACE calculator from :func:`load_mace`; None loads one
+    from ``model_path``.
     """
     log = log or (lambda line: None)
     atoms.pbc = True
     held = [bond for bond in bonds if bond[2] in springs]
     start = atoms.copy()                 # the raw guess, for the bond check
 
-    mace = load_mace(model_path, device)
+    mace = calc if calc is not None else load_mace(model_path, device)
     own_log = isinstance(logfile, str)
     own_traj = isinstance(trajectory, str)
     logfile = open(logfile, "w") if own_log else logfile

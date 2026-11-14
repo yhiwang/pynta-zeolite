@@ -84,7 +84,8 @@ def main(band_path):
           % (len(images), band["n_before"], band["n_after"], band["n_free"],
              band["n_free_framework"], os.path.basename(settings.MACE_MODEL)))
 
-    model = load_mace(settings.MACE_MODEL)
+    model = load_mace(settings.MACE_MODEL, head=settings.MACE_HEAD, d3=settings.MACE_D3,
+                      d3_damping=settings.D3_DAMPING, d3_xc=settings.D3_XC)
     endpoints = {}
     for k, name in ((0, "initial"), (len(images) - 1, "final")):
         if settings.NEB_RELAX_ENDPOINTS:

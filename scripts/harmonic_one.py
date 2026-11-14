@@ -28,7 +28,7 @@ import layout
 import settings
 from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io import read, write
-from pyntaz.harmonic_relax import state_relax
+from pyntaz.harmonic_relax import load_mace, state_relax
 
 
 def main(xyz_path, state):
@@ -52,6 +52,8 @@ def main(xyz_path, state):
     print("framework %d atoms, adsorbate %d atoms, oxygens %s"
           % (n_framework, len(atoms) - n_framework, record["oxygens"]))
 
+    calc = load_mace(settings.MACE_MODEL, head=settings.MACE_HEAD, d3=settings.MACE_D3,
+                     d3_damping=settings.D3_DAMPING, d3_xc=settings.D3_XC)
     result = state_relax(
         atoms, bonds, n_framework, settings.MACE_MODEL,
         springs=mode["springs"], mult=mode["mult"], free_relax=mode["free_relax"], sites=record["oxygens"],
@@ -60,7 +62,7 @@ def main(xyz_path, state):
         e_tol=settings.TS_HARMONIC_E_TOL, fmax=settings.TS_HARMONIC_FMAX,
         free_steps=settings.TS_HARMONIC_FREE_STEPS, cutoff=settings.TS_HARMONIC_BOND_CUTOFF,
         logfile=os.path.join(out_dir, logfile), trajectory=os.path.join(out_dir, trajectory),
-        log=print)
+        log=print, calc=calc)
 
     harmonic = result["harmonic"]
     targets = {(i, j): r0 for i, j, _, _, r0 in harmonic["lengths"]} if harmonic else {}

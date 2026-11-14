@@ -1,6 +1,12 @@
 """Where everything lives on disk. This is the only file that knows the
 run-directory layout and the file names, so every step finds things the
-same way and changing the layout means changing this file::
+same way and changing the layout means changing this file.
+
+One run directory per model, round, framework and site (run_dirs)::
+
+    runs/<MODEL>/<ROUND>/<FRAMEWORK>/<site>/      e.g. runs/mpa0/round0/MOR/T1/
+
+and inside each one::
 
     <run_dir>/bare.xyz, framework.json, <CODE>_pairs.json        step 0
     <run_dir>/TS_guesses/<i>_rxn/info.json                       step 1
@@ -85,6 +91,16 @@ DFT_VIB_MODE = "mode.xyz"             # quasi_irc/vib/: start.xyz + the first mo
 DFT_VIB_BULKY = ("WAVECAR", "CHG", "CHGCAR", "vasprun.xml", "vaspout.h5", "DOSCAR",
                  "EIGENVAL", "PROCAR", "XDATCAR", "PCDAT")   # quasi_irc/vib/vasp/: the big VASP files,
                                        # deleted after every job unless settings.DFT_VIB_KEEP_WAVECAR
+
+
+RUNS = "runs"                         # top folder of all runs, relative to the repo
+
+
+def run_dirs(model, round_name, framework, sites):
+    """[(site, run_dir)] with run_dir = runs/<model>/<round>/<framework>/<site>,
+    in the order of ``sites``."""
+    return [(site, os.path.join(RUNS, model, round_name, framework, site))
+            for site in sites]
 
 
 class RunLayout:

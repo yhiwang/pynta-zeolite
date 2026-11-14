@@ -24,26 +24,30 @@ import layout
 import settings
 from ts_summary import LABELS, VERDICTS, collect, plot_summary, verdict_counts, write_csv
 
-run = layout.RunLayout(settings.RUN_DIR)
-if not os.path.isdir(run.ts_sella):
-    sys.exit("%s not found -- run step 4 first" % run.ts_sella)
+for site, run_dir in layout.run_dirs(settings.MODEL, settings.ROUND, settings.FRAMEWORK, settings.SITES):
+    print("\n=== %s" % run_dir)
+    run = layout.RunLayout(run_dir)
+    if not os.path.isdir(run.ts_sella):
+        print("%s not found -- run step 4 first -- site skipped" % run.ts_sella)
+        continue
 
-files = {"info": layout.REACTION_INFO, "bonds": layout.TS_BONDS_JSON,
-         "start": layout.TS_START, "end": layout.TS_SELLA_STRUCTURE,
-         "result": layout.TS_SELLA_RESULT, "err": layout.JOB_ERR}
-rows = collect(run.ts_sella, files)
-if not rows:
-    sys.exit("no Sella runs under %s" % run.ts_sella)
+    files = {"info": layout.REACTION_INFO, "bonds": layout.TS_BONDS_JSON,
+             "start": layout.TS_START, "end": layout.TS_SELLA_STRUCTURE,
+             "result": layout.TS_SELLA_RESULT, "err": layout.JOB_ERR}
+    rows = collect(run.ts_sella, files)
+    if not rows:
+        print("no Sella runs under %s -- site skipped" % run.ts_sella)
+        continue
 
-csv_path = os.path.join(run.ts_sella, layout.TS_SUMMARY_CSV)
-png_path = os.path.join(run.ts_sella, layout.TS_SUMMARY_PNG)
-write_csv(rows, csv_path)
-plot_summary(rows, png_path, os.path.relpath(settings.RUN_DIR), reasons="--reasons" in sys.argv[1:])
+    csv_path = os.path.join(run.ts_sella, layout.TS_SUMMARY_CSV)
+    png_path = os.path.join(run.ts_sella, layout.TS_SUMMARY_PNG)
+    write_csv(rows, csv_path)
+    plot_summary(rows, png_path, os.path.relpath(run_dir), reasons="--reasons" in sys.argv[1:])
 
-counts = verdict_counts(rows)
-present = [v for v in VERDICTS if any(row["verdict"] == v for row in rows)]
-print("%-10s %-9s " % ("reaction", "start") + " ".join("%13s" % LABELS[v] for v in present))
-for (reaction, start) in sorted(counts):
-    print("%-10s %-9s " % ("R%d" % reaction, start)
-          + " ".join("%13d" % counts[(reaction, start)][v] for v in present))
-print("\nwrote %s\n      %s" % (csv_path, png_path))
+    counts = verdict_counts(rows)
+    present = [v for v in VERDICTS if any(row["verdict"] == v for row in rows)]
+    print("%-10s %-9s " % ("reaction", "start") + " ".join("%13s" % LABELS[v] for v in present))
+    for (reaction, start) in sorted(counts):
+        print("%-10s %-9s " % ("R%d" % reaction, start)
+              + " ".join("%13d" % counts[(reaction, start)][v] for v in present))
+    print("\nwrote %s\n      %s" % (csv_path, png_path))

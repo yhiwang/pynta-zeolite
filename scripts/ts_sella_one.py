@@ -55,7 +55,8 @@ def main(xyz_path):
           % (len(free), len(free) - (len(atoms) - n_framework),
              settings.TS_SELLA_FREE_RADIUS, len(atoms) - n_framework))
 
-    calc = load_mace(settings.MACE_MODEL)
+    calc = load_mace(settings.MACE_MODEL, head=settings.MACE_HEAD, d3=settings.MACE_D3,
+                     d3_damping=settings.D3_DAMPING, d3_xc=settings.D3_XC)
     atoms.calc = calc
     start_energy = float(atoms.get_potential_energy())
     start_lengths = lengths(atoms, bonds)

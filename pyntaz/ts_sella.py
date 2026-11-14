@@ -32,12 +32,18 @@ IMAG_CUTOFF = 50.0      # cm-1, smaller imaginary modes count as noise
 MODE_MIN = 0.2          # |bond stretch| in the first mode that counts as moving it
 
 
-def load_mace(model_path, device="cpu"):
+def load_mace(model_path, device="cpu", head=None, d3=False, d3_damping="bj", d3_xc="pbe"):
     """One MACE calculator in float64 (Sella's curvature estimates need
     precise forces). ``model_path`` must be a file: a bare model name makes
-    MACE try to download it, which fails on a compute node without internet."""
+    MACE try to download it, which fails on a compute node without internet.
+    ``head`` picks the head of a multi-head model (None = the model's own);
+    ``d3`` adds Grimme D3 dispersion with ``d3_damping`` and the ``d3_xc``
+    parameters on top."""
     from mace.calculators import mace_mp   # heavy import, only when needed
-    return mace_mp(model=model_path, default_dtype="float64", device=device)
+    options = {"head": head} if head else {}
+    if d3:
+        options.update(dispersion=True, damping=d3_damping, dispersion_xc=d3_xc)
+    return mace_mp(model=model_path, default_dtype="float64", device=device, **options)
 
 
 def free_atoms(atoms, n_framework, free_radius=FREE_RADIUS):

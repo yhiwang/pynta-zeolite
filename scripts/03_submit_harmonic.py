@@ -57,10 +57,18 @@ JOB_TEMPLATE = """#!/bin/bash
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export PYTHONPATH=%(repo)s:$PYTHONPATH
+# the model this job was submitted with (settings.py reads these)
+export PYNTAZ_JOB_MODEL=%(model)s
+export PYNTAZ_JOB_HEAD=%(head)s
+export PYNTAZ_JOB_D3=%(d3)s
 
 # the env python directly: `conda activate` fails silently in batch jobs
 %(python)s %(worker)s %(xyz)s %(state)s
 """
+
+# written into every job.sh, so a queued job keeps its model
+MODEL_FIELDS = {"model": settings.MACE_MODEL, "head": settings.MACE_HEAD or "",
+                "d3": "1" if settings.MACE_D3 else "0"}
 
 
 def job_script(name, xyz_name, state):
@@ -70,7 +78,8 @@ def job_script(name, xyz_name, state):
                                                      settings.SLURM_MEMORY,
                                                      settings.TS_HARMONIC_SLURM_TIME, name=name),
                            "repo": _common.REPO, "python": machine.PYTHON,
-                           "worker": WORKER, "xyz": xyz_name, "state": state}
+                           "worker": WORKER, "xyz": xyz_name, "state": state,
+                           **MODEL_FIELDS}
 
 
 def missing_machine_paths():
@@ -81,111 +90,113 @@ def missing_machine_paths():
             if not os.path.exists(path)]
 
 
-run = layout.RunLayout(settings.RUN_DIR)
-
 for name, path in missing_machine_paths():
     print("%s does not exist: %s" % (name, path))
 if missing_machine_paths():
-    sys.exit("fix scripts/settings.py or set the PYNTAZ_* environment variables")
-if not os.path.isdir(run.ts_unique):
-    sys.exit("%s not found -- run steps 1 and 2 first" % run.ts_unique)
+    sys.exit("fix scripts/settings.py or scripts/machine.py")
 
-n_framework = len(read(os.path.join(settings.RUN_DIR, layout.BARE_XYZ)))
-wanted = settings.TS_HARMONIC_REACTIONS
-states = list(settings.TS_HARMONIC_STATES)
-unknown = [state for state in states if state not in settings.TS_HARMONIC_MODES]
-if unknown:
-    sys.exit("TS_HARMONIC_STATES has %s, not in TS_HARMONIC_MODES" % unknown)
-print("%s: %d framework atoms, reactions %s, states %s"
-      % (settings.RUN_DIR, n_framework, "all" if wanted is None else list(wanted), states))
-
-n_jobs = n_done = n_queued = n_bad = 0
-for reaction_name, reaction_dir in layout.species_dirs(run.ts_unique):
-    index = int(reaction_name.split("_")[0])
-    if wanted is not None and index not in wanted:
-        continue
-    with open(os.path.join(reaction_dir, layout.REACTION_INFO)) as handle:
-        info = json.load(handle)
-    ts = TSGraph(molecule_from_adjlist(info["reactant"]), molecule_from_adjlist(info["product"]))
-    print("\n%s  %s" % (reaction_name, info["reaction"]))
-    if len(ts.sites()) != 2:
-        print("  %d site(s) -- only two-site reactions are handled, skipped" % len(ts.sites()))
+for site, run_dir in layout.run_dirs(settings.MODEL, settings.ROUND, settings.FRAMEWORK, settings.SITES):
+    run = layout.RunLayout(run_dir)
+    if not os.path.isdir(run.ts_unique):
+        print("%s not found -- run steps 1 and 2 first -- site skipped" % run.ts_unique)
         continue
 
-    target_dir = os.path.join(run.ts_harmonic, reaction_name)
-    os.makedirs(target_dir, exist_ok=True)
-    shutil.copy2(os.path.join(reaction_dir, layout.REACTION_INFO),
-                 os.path.join(target_dir, layout.REACTION_INFO))
+    n_framework = len(read(os.path.join(run_dir, layout.BARE_XYZ)))
+    wanted = settings.TS_HARMONIC_REACTIONS
+    states = list(settings.TS_HARMONIC_STATES)
+    unknown = [state for state in states if state not in settings.TS_HARMONIC_MODES]
+    if unknown:
+        sys.exit("TS_HARMONIC_STATES has %s, not in TS_HARMONIC_MODES" % unknown)
+    print("%s: %d framework atoms, reactions %s, states %s"
+          % (run_dir, n_framework, "all" if wanted is None else list(wanted), states))
 
-    counts = {"submit": 0, "done": 0, "queued": 0, "bad": 0}
-    for relative, xyz in layout.initial_guess_files(reaction_dir):
-        pair, stem = relative.split(os.sep)
-        guess = info["pairs"][pair]["guesses"][stem]
-        label = os.path.join(reaction_name, relative)
-
-        guess_dir = os.path.join(target_dir, relative)
-        os.makedirs(guess_dir, exist_ok=True)
-        xyz_name = os.path.basename(xyz)
-        shutil.copy2(xyz, os.path.join(guess_dir, xyz_name))
-
-        todo = []
-        for state in states:
-            job_dir = layout.harmonic_job_dir(guess_dir, state)
-            tag = "%-7s %s" % (state, relative)
-            if os.path.exists(os.path.join(job_dir, layout.harmonic_files(state)[0])):
-                print("  already done   %s" % tag)
-                counts["done"] += 1
-            elif os.path.exists(os.path.join(job_dir, layout.JOB_ID)):
-                with open(os.path.join(job_dir, layout.JOB_ID)) as handle:
-                    print("  in the queue   %s  (job %s, no result yet)" % (tag, handle.read().strip()))
-                counts["queued"] += 1
-            else:
-                todo.append(state)
-        if not todo:
+    n_jobs = n_done = n_queued = n_bad = 0
+    for reaction_name, reaction_dir in layout.species_dirs(run.ts_unique):
+        index = int(reaction_name.split("_")[0])
+        if wanted is not None and index not in wanted:
+            continue
+        with open(os.path.join(reaction_dir, layout.REACTION_INFO)) as handle:
+            info = json.load(handle)
+        ts = TSGraph(molecule_from_adjlist(info["reactant"]), molecule_from_adjlist(info["product"]))
+        print("\n%s  %s" % (reaction_name, info["reaction"]))
+        if len(ts.sites()) != 2:
+            print("  %d site(s) -- only two-site reactions are handled, skipped" % len(ts.sites()))
             continue
 
-        atoms = read(xyz)
-        try:
-            check_atom_order(atoms, ts, guess["oxygens"], n_framework)
-        except ValueError as error:
-            print("  NOT SUBMITTED  %s: %s" % (relative, error))
-            counts["bad"] += len(todo)
-            continue
-        bonds = guess_bond_indices(ts, guess["oxygens"], n_framework)
-        for bond in bonds:
-            bond["start"] = round(float(atoms.get_distance(*bond["indices"], mic=True)), 3)
-        with open(os.path.join(guess_dir, layout.TS_BONDS_JSON), "w") as handle:
-            json.dump({"guess": label, "reaction": info["reaction"], "index": index,
-                       "n_framework": n_framework, "oxygens": guess["oxygens"],
-                       "flip": guess["flip"], "bonds": bonds}, handle, indent=2)
+        target_dir = os.path.join(run.ts_harmonic, reaction_name)
+        os.makedirs(target_dir, exist_ok=True)
+        shutil.copy2(os.path.join(reaction_dir, layout.REACTION_INFO),
+                     os.path.join(target_dir, layout.REACTION_INFO))
 
-        for state in todo:
-            job_dir = layout.harmonic_job_dir(guess_dir, state)
-            os.makedirs(job_dir, exist_ok=True)
-            tag = "%-7s %s" % (state, relative)
-            xyz_arg = os.path.relpath(os.path.join(guess_dir, xyz_name), job_dir)
-            with open(os.path.join(job_dir, layout.JOB_SCRIPT), "w") as handle:
-                handle.write(job_script("tsh%d_%s%s" % (index, pair[-2:], state[0]), xyz_arg, state))
-            if settings.SUBMIT:
-                result = subprocess.run(["sbatch", "--chdir=" + job_dir, layout.JOB_SCRIPT],
-                                        capture_output=True, text=True)
-                print("  %s -> %s" % (tag, result.stdout.strip() or result.stderr.strip()))
-                if result.returncode != 0:
-                    sys.exit("sbatch failed, stopping")
-                with open(os.path.join(job_dir, layout.JOB_ID), "w") as handle:
-                    handle.write(result.stdout.strip().split()[-1] + "\n")
-            else:
-                print("  would submit   %s" % tag)
-            counts["submit"] += 1
+        counts = {"submit": 0, "done": 0, "queued": 0, "bad": 0}
+        for relative, xyz in layout.initial_guess_files(reaction_dir):
+            pair, stem = relative.split(os.sep)
+            guess = info["pairs"][pair]["guesses"][stem]
+            label = os.path.join(reaction_name, relative)
 
-    print("  %d jobs %s, %d already done, %d in the queue, %d not submitted"
-          % (counts["submit"], "submitted" if settings.SUBMIT else "to submit",
-             counts["done"], counts["queued"], counts["bad"]))
-    n_jobs += counts["submit"]
-    n_done += counts["done"]
-    n_queued += counts["queued"]
-    n_bad += counts["bad"]
+            guess_dir = os.path.join(target_dir, relative)
+            os.makedirs(guess_dir, exist_ok=True)
+            xyz_name = os.path.basename(xyz)
+            shutil.copy2(xyz, os.path.join(guess_dir, xyz_name))
 
-print("\n%d jobs %s, %d already done, %d in the queue, %d not submitted  (%s)"
-      % (n_jobs, "submitted" if settings.SUBMIT else "would be submitted",
-         n_done, n_queued, n_bad, run.ts_harmonic))
+            todo = []
+            for state in states:
+                job_dir = layout.harmonic_job_dir(guess_dir, state)
+                tag = "%-7s %s" % (state, relative)
+                if os.path.exists(os.path.join(job_dir, layout.harmonic_files(state)[0])):
+                    print("  already done   %s" % tag)
+                    counts["done"] += 1
+                elif os.path.exists(os.path.join(job_dir, layout.JOB_ID)):
+                    with open(os.path.join(job_dir, layout.JOB_ID)) as handle:
+                        print("  in the queue   %s  (job %s, no result yet)" % (tag, handle.read().strip()))
+                    counts["queued"] += 1
+                else:
+                    todo.append(state)
+            if not todo:
+                continue
+
+            atoms = read(xyz)
+            try:
+                check_atom_order(atoms, ts, guess["oxygens"], n_framework)
+            except ValueError as error:
+                print("  NOT SUBMITTED  %s: %s" % (relative, error))
+                counts["bad"] += len(todo)
+                continue
+            bonds = guess_bond_indices(ts, guess["oxygens"], n_framework)
+            for bond in bonds:
+                bond["start"] = round(float(atoms.get_distance(*bond["indices"], mic=True)), 3)
+            with open(os.path.join(guess_dir, layout.TS_BONDS_JSON), "w") as handle:
+                json.dump({"guess": label, "reaction": info["reaction"], "index": index,
+                           "n_framework": n_framework, "oxygens": guess["oxygens"],
+                           "flip": guess["flip"], "bonds": bonds}, handle, indent=2)
+
+            for state in todo:
+                job_dir = layout.harmonic_job_dir(guess_dir, state)
+                os.makedirs(job_dir, exist_ok=True)
+                tag = "%-7s %s" % (state, relative)
+                xyz_arg = os.path.relpath(os.path.join(guess_dir, xyz_name), job_dir)
+                with open(os.path.join(job_dir, layout.JOB_SCRIPT), "w") as handle:
+                    handle.write(job_script("tsh%d_%s%s" % (index, pair[-2:], state[0]), xyz_arg, state))
+                if settings.SUBMIT:
+                    result = subprocess.run(["sbatch", "--chdir=" + job_dir, layout.JOB_SCRIPT],
+                                            capture_output=True, text=True)
+                    print("  %s -> %s" % (tag, result.stdout.strip() or result.stderr.strip()))
+                    if result.returncode != 0:
+                        sys.exit("sbatch failed, stopping")
+                    with open(os.path.join(job_dir, layout.JOB_ID), "w") as handle:
+                        handle.write(result.stdout.strip().split()[-1] + "\n")
+                else:
+                    print("  would submit   %s" % tag)
+                counts["submit"] += 1
+
+        print("  %d jobs %s, %d already done, %d in the queue, %d not submitted"
+              % (counts["submit"], "submitted" if settings.SUBMIT else "to submit",
+                 counts["done"], counts["queued"], counts["bad"]))
+        n_jobs += counts["submit"]
+        n_done += counts["done"]
+        n_queued += counts["queued"]
+        n_bad += counts["bad"]
+
+    print("\n%d jobs %s, %d already done, %d in the queue, %d not submitted  (%s)"
+          % (n_jobs, "submitted" if settings.SUBMIT else "would be submitted",
+             n_done, n_queued, n_bad, run.ts_harmonic))

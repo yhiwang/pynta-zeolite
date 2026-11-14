@@ -44,10 +44,18 @@ JOB_TEMPLATE = """#!/bin/bash
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export PYTHONPATH=%(repo)s:$PYTHONPATH
+# the model this job was submitted with (settings.py reads these)
+export PYNTAZ_JOB_MODEL=%(model)s
+export PYNTAZ_JOB_HEAD=%(head)s
+export PYNTAZ_JOB_D3=%(d3)s
 
 # the env python directly: `conda activate` fails silently in batch jobs
 %(python)s %(worker)s %(xyz)s
 """
+
+# written into every job.sh, so a queued job keeps its model
+MODEL_FIELDS = {"model": settings.MACE_MODEL, "head": settings.MACE_HEAD or "",
+                "d3": "1" if settings.MACE_D3 else "0"}
 
 
 def job_script(name):
@@ -57,7 +65,7 @@ def job_script(name):
                                                      settings.SLURM_MEMORY,
                                                      settings.TS_SELLA_SLURM_TIME, name=name),
                            "repo": _common.REPO, "python": machine.PYTHON,
-                           "worker": WORKER, "xyz": layout.TS_START}
+                           "worker": WORKER, "xyz": layout.TS_START, **MODEL_FIELDS}
 
 
 def start_file(config_dir, start):
@@ -75,86 +83,88 @@ def missing_machine_paths():
             if not os.path.exists(path)]
 
 
-run = layout.RunLayout(settings.RUN_DIR)
-
 for name, path in missing_machine_paths():
     print("%s does not exist: %s" % (name, path))
 if missing_machine_paths():
-    sys.exit("fix scripts/settings.py or set the PYNTAZ_* environment variables")
-if not os.path.isdir(run.ts_harmonic):
-    sys.exit("%s not found -- run step 3 first" % run.ts_harmonic)
-unknown = [start for start in settings.TS_SELLA_STARTS if start not in STARTS]
-if unknown:
-    sys.exit("unknown TS_SELLA_STARTS %s; choose from %s" % (unknown, list(STARTS)))
+    sys.exit("fix scripts/settings.py or scripts/machine.py")
 
-wanted = settings.TS_SELLA_REACTIONS
-print("%s: reactions %s, starts %s"
-      % (settings.RUN_DIR, "all" if wanted is None else list(wanted),
-         ", ".join(settings.TS_SELLA_STARTS)))
-
-totals = {"submit": 0, "done": 0, "queued": 0, "waiting": 0, "skipped": 0}
-for reaction_name, reaction_dir in layout.species_dirs(run.ts_harmonic):
-    index = int(reaction_name.split("_")[0])
-    if wanted is not None and index not in wanted:
+for site, run_dir in layout.run_dirs(settings.MODEL, settings.ROUND, settings.FRAMEWORK, settings.SITES):
+    run = layout.RunLayout(run_dir)
+    if not os.path.isdir(run.ts_harmonic):
+        print("%s not found -- run step 3 first -- site skipped" % run.ts_harmonic)
         continue
-    print("\n%s" % reaction_name)
-    target_reaction = os.path.join(run.ts_sella, reaction_name)
-    os.makedirs(target_reaction, exist_ok=True)
-    shutil.copy2(os.path.join(reaction_dir, layout.REACTION_INFO),
-                 os.path.join(target_reaction, layout.REACTION_INFO))
+    unknown = [start for start in settings.TS_SELLA_STARTS if start not in STARTS]
+    if unknown:
+        sys.exit("unknown TS_SELLA_STARTS %s; choose from %s" % (unknown, list(STARTS)))
 
-    counts = {"submit": 0, "done": 0, "queued": 0, "waiting": 0, "skipped": 0}
-    for relative, _ in layout.initial_guess_files(reaction_dir):
-        config_dir = os.path.join(reaction_dir, relative)
-        bonds_json = os.path.join(config_dir, layout.TS_BONDS_JSON)
-        pair = relative.split(os.sep)[0]
-        if not os.path.isfile(bonds_json):
-            print("  skipped        %s  (step 3 did not set it up: no %s)"
-                  % (relative, layout.TS_BONDS_JSON))
-            counts["skipped"] += 1
+    wanted = settings.TS_SELLA_REACTIONS
+    print("%s: reactions %s, starts %s"
+          % (run_dir, "all" if wanted is None else list(wanted),
+             ", ".join(settings.TS_SELLA_STARTS)))
+
+    totals = {"submit": 0, "done": 0, "queued": 0, "waiting": 0, "skipped": 0}
+    for reaction_name, reaction_dir in layout.species_dirs(run.ts_harmonic):
+        index = int(reaction_name.split("_")[0])
+        if wanted is not None and index not in wanted:
             continue
-        for start in settings.TS_SELLA_STARTS:
-            label = "%s/%s" % (relative, start)
-            job_dir = os.path.join(target_reaction, relative, start)
-            if os.path.exists(os.path.join(job_dir, layout.TS_SELLA_RESULT)):
-                print("  already done   %s" % label)
-                counts["done"] += 1
-                continue
-            if os.path.exists(os.path.join(job_dir, layout.JOB_ID)):
-                with open(os.path.join(job_dir, layout.JOB_ID)) as handle:
-                    print("  in the queue   %s  (job %s, no result yet)" % (label, handle.read().strip()))
-                counts["queued"] += 1
-                continue
-            source = start_file(config_dir, start)
-            if not os.path.isfile(source):
-                print("  waiting        %s  (no %s yet)" % (label, os.path.basename(source)))
-                counts["waiting"] += 1
-                continue
+        print("\n%s" % reaction_name)
+        target_reaction = os.path.join(run.ts_sella, reaction_name)
+        os.makedirs(target_reaction, exist_ok=True)
+        shutil.copy2(os.path.join(reaction_dir, layout.REACTION_INFO),
+                     os.path.join(target_reaction, layout.REACTION_INFO))
 
-            os.makedirs(job_dir, exist_ok=True)
-            shutil.copy2(source, os.path.join(job_dir, layout.TS_START))
-            shutil.copy2(bonds_json, os.path.join(job_dir, layout.TS_BONDS_JSON))
-            with open(os.path.join(job_dir, layout.JOB_SCRIPT), "w") as handle:
-                handle.write(job_script("tss%d_%s_%s" % (index, pair[-2:], start[0])))
-            if settings.SUBMIT:
-                result = subprocess.run(["sbatch", "--chdir=" + job_dir, layout.JOB_SCRIPT],
-                                        capture_output=True, text=True)
-                print("  %s -> %s" % (label, result.stdout.strip() or result.stderr.strip()))
-                if result.returncode != 0:
-                    sys.exit("sbatch failed, stopping")
-                with open(os.path.join(job_dir, layout.JOB_ID), "w") as handle:
-                    handle.write(result.stdout.strip().split()[-1] + "\n")
-            else:
-                print("  would submit   %s" % label)
-            counts["submit"] += 1
+        counts = {"submit": 0, "done": 0, "queued": 0, "waiting": 0, "skipped": 0}
+        for relative, _ in layout.initial_guess_files(reaction_dir):
+            config_dir = os.path.join(reaction_dir, relative)
+            bonds_json = os.path.join(config_dir, layout.TS_BONDS_JSON)
+            pair = relative.split(os.sep)[0]
+            if not os.path.isfile(bonds_json):
+                print("  skipped        %s  (step 3 did not set it up: no %s)"
+                      % (relative, layout.TS_BONDS_JSON))
+                counts["skipped"] += 1
+                continue
+            for start in settings.TS_SELLA_STARTS:
+                label = "%s/%s" % (relative, start)
+                job_dir = os.path.join(target_reaction, relative, start)
+                if os.path.exists(os.path.join(job_dir, layout.TS_SELLA_RESULT)):
+                    print("  already done   %s" % label)
+                    counts["done"] += 1
+                    continue
+                if os.path.exists(os.path.join(job_dir, layout.JOB_ID)):
+                    with open(os.path.join(job_dir, layout.JOB_ID)) as handle:
+                        print("  in the queue   %s  (job %s, no result yet)" % (label, handle.read().strip()))
+                    counts["queued"] += 1
+                    continue
+                source = start_file(config_dir, start)
+                if not os.path.isfile(source):
+                    print("  waiting        %s  (no %s yet)" % (label, os.path.basename(source)))
+                    counts["waiting"] += 1
+                    continue
 
-    print("  %d %s, %d already done, %d in the queue, %d waiting for step 3, %d guesses skipped"
-          % (counts["submit"], "submitted" if settings.SUBMIT else "to submit",
-             counts["done"], counts["queued"], counts["waiting"], counts["skipped"]))
-    for key in totals:
-        totals[key] += counts[key]
+                os.makedirs(job_dir, exist_ok=True)
+                shutil.copy2(source, os.path.join(job_dir, layout.TS_START))
+                shutil.copy2(bonds_json, os.path.join(job_dir, layout.TS_BONDS_JSON))
+                with open(os.path.join(job_dir, layout.JOB_SCRIPT), "w") as handle:
+                    handle.write(job_script("tss%d_%s_%s" % (index, pair[-2:], start[0])))
+                if settings.SUBMIT:
+                    result = subprocess.run(["sbatch", "--chdir=" + job_dir, layout.JOB_SCRIPT],
+                                            capture_output=True, text=True)
+                    print("  %s -> %s" % (label, result.stdout.strip() or result.stderr.strip()))
+                    if result.returncode != 0:
+                        sys.exit("sbatch failed, stopping")
+                    with open(os.path.join(job_dir, layout.JOB_ID), "w") as handle:
+                        handle.write(result.stdout.strip().split()[-1] + "\n")
+                else:
+                    print("  would submit   %s" % label)
+                counts["submit"] += 1
 
-print("\n%d starts %s, %d already done, %d in the queue, %d waiting for step 3, "
-      "%d guesses skipped  (%s)"
-      % (totals["submit"], "submitted" if settings.SUBMIT else "would be submitted",
-         totals["done"], totals["queued"], totals["waiting"], totals["skipped"], run.ts_sella))
+        print("  %d %s, %d already done, %d in the queue, %d waiting for step 3, %d guesses skipped"
+              % (counts["submit"], "submitted" if settings.SUBMIT else "to submit",
+                 counts["done"], counts["queued"], counts["waiting"], counts["skipped"]))
+        for key in totals:
+            totals[key] += counts[key]
+
+    print("\n%d starts %s, %d already done, %d in the queue, %d waiting for step 3, "
+          "%d guesses skipped  (%s)"
+          % (totals["submit"], "submitted" if settings.SUBMIT else "would be submitted",
+             totals["done"], totals["queued"], totals["waiting"], totals["skipped"], run.ts_sella))

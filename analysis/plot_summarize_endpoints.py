@@ -25,30 +25,34 @@ import layout
 import settings
 from endpoint_summary import collect, plot_summary, survivor_counts, write_csv
 
-run = layout.RunLayout(settings.RUN_DIR)
-if not os.path.isdir(run.ts_harmonic):
-    sys.exit("%s not found -- run step 3 first" % run.ts_harmonic)
+for site, run_dir in layout.run_dirs(settings.MODEL, settings.ROUND, settings.FRAMEWORK, settings.SITES):
+    print("\n=== %s" % run_dir)
+    run = layout.RunLayout(run_dir)
+    if not os.path.isdir(run.ts_harmonic):
+        print("%s not found -- run step 3 first -- site skipped" % run.ts_harmonic)
+        continue
 
-files = {"info": layout.REACTION_INFO, "bonds": layout.TS_BONDS_JSON,
-         "result": layout.ENDPOINT_RESULT, "err": layout.JOB_ERR,
-         "guess_suffix": layout.INITIAL_GUESS_SUFFIX}
-rows = collect(run.ts_harmonic, files)
-if not rows:
-    sys.exit("no step 3 guesses under %s" % run.ts_harmonic)
+    files = {"info": layout.REACTION_INFO, "bonds": layout.TS_BONDS_JSON,
+             "result": layout.ENDPOINT_RESULT, "err": layout.JOB_ERR,
+             "guess_suffix": layout.INITIAL_GUESS_SUFFIX}
+    rows = collect(run.ts_harmonic, files)
+    if not rows:
+        print("no step 3 guesses under %s -- site skipped" % run.ts_harmonic)
+        continue
 
-csv_path = os.path.join(run.ts_harmonic, layout.ENDPOINT_SUMMARY_CSV)
-png_path = os.path.join(run.ts_harmonic, layout.ENDPOINT_SUMMARY_PNG)
-write_csv(rows, csv_path)
-plot_summary(rows, png_path, os.path.relpath(settings.RUN_DIR),
-             reasons="--reasons" in sys.argv[1:], cutoff=settings.TS_HARMONIC_BOND_CUTOFF)
+    csv_path = os.path.join(run.ts_harmonic, layout.ENDPOINT_SUMMARY_CSV)
+    png_path = os.path.join(run.ts_harmonic, layout.ENDPOINT_SUMMARY_PNG)
+    write_csv(rows, csv_path)
+    plot_summary(rows, png_path, os.path.relpath(run_dir),
+                 reasons="--reasons" in sys.argv[1:], cutoff=settings.TS_HARMONIC_BOND_CUTOFF)
 
-counts = survivor_counts(rows)
-print("%-10s %8s %11s %9s %9s" % ("reaction", "guesses", "initial ok", "final ok", "survived"))
-for reaction in sorted(counts):
-    c = counts[reaction]
+    counts = survivor_counts(rows)
+    print("%-10s %8s %11s %9s %9s" % ("reaction", "guesses", "initial ok", "final ok", "survived"))
+    for reaction in sorted(counts):
+        c = counts[reaction]
+        print("%-10s %8d %11d %9d %9d"
+              % ("R%d" % reaction, c["guesses"], c["initial"], c["final"], c["survived"]))
+    total = sum(counts.values(), Counter())
     print("%-10s %8d %11d %9d %9d"
-          % ("R%d" % reaction, c["guesses"], c["initial"], c["final"], c["survived"]))
-total = sum(counts.values(), Counter())
-print("%-10s %8d %11d %9d %9d"
-      % ("total", total["guesses"], total["initial"], total["final"], total["survived"]))
-print("\nwrote %s\n      %s" % (csv_path, png_path))
+          % ("total", total["guesses"], total["initial"], total["final"], total["survived"]))
+    print("\nwrote %s\n      %s" % (csv_path, png_path))
