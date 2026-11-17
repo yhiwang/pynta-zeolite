@@ -17,7 +17,7 @@ if MACHINE == "hive":
     CPU_PARTITION = "high"
     CPU_QOS = ""
     CPU_CONSTRAINT = ""
-    CPU_EXTRA = []              # more #SBATCH options, one string each
+    CPU_EXTRA = ["--exclude=hive-as-11-2-39"]   # bad node, Nov 2026: jobs fail to start there
     GPU_ACCOUNT = "ark245grp"
     GPU_PARTITION = "gpu-6000-blackwell"
     GPU_QOS = ""

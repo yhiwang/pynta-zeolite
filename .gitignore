@@ -31,3 +31,5 @@ runs*/
 scripts/test.py
 tests/*.xyz
 structures/
+
+runs

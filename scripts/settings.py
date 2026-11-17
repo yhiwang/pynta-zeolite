@@ -47,6 +47,13 @@ FRAMEWORK = "MOR"      # the current framework: edit this line per submission
 ROUND = "round0"       # the sampling -> DFT -> fine-tune round
 REACTIONS = "reaction.yaml"
 
+
+# a step 5 job keeps the run it was submitted for (scripts/05_submit_collect_neb.py
+# writes these into its job script), so MODEL can change while the job waits
+MODEL = os.environ.get("PYNTAZ_JOB_MODEL_NAME", MODEL)
+ROUND = os.environ.get("PYNTAZ_JOB_ROUND", ROUND)
+FRAMEWORK = os.environ.get("PYNTAZ_JOB_FRAMEWORK", FRAMEWORK)
+
 if MODEL not in MODELS or ROUND not in MODELS[MODEL]:
     sys.exit("settings.py: no MODELS entry for MODEL = %r, ROUND = %r" % (MODEL, ROUND))
 if FRAMEWORK not in FRAMEWORKS:
@@ -178,6 +185,11 @@ NEB_FREE_RADIUS = TS_HARMONIC_FRAMEWORK_RADIUS   # A, framework atoms this close
                                 # the adsorbate in IS, TS or FS move in the NEB
 # changing any of the four above rebuilds the band of every guess whose NEB
 # has not been submitted yet; bands with a job.id or a result are left alone
+
+# step 5 as a job (scripts/05_submit_collect_neb.py): one job per MODEL and FRAMEWORK
+NEB_COLLECT_SLURM_CORES = 1
+NEB_COLLECT_SLURM_MEMORY = "8G"
+NEB_COLLECT_SLURM_TIME = "02:00:00"
 
 # --------------------------------------------------------------------------
 # step 6: climbing-image NEB with MACE (one SLURM job per guess; SUBMIT,
