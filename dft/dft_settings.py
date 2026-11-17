@@ -18,7 +18,7 @@ COLLECT_STRIDE = 1              # look at every Nth step (1: all of them)
 COLLECT_MIN_DISP = 0.1          # A, keep a frame once some atom has moved this far
 
 # sella: frames of TS_sella/.../<start>/sella.traj
-COLLECT_STARTS = ("harmonic", "raw")
+COLLECT_STARTS = ("harmonic",)
 COLLECT_VERDICTS = None         # None: every verdict; or e.g. ("ts", "wrong_mode")
 COLLECT_MAX_FRAMES = 3          # per trajectory, end points included; None: no cap
 

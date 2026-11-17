@@ -34,7 +34,7 @@ MODELS = {
     "omat0": {"round0": {"file": "mace-omat-0-medium.model", "head": None, "d3": True}},
     "mh1": {"round0": {"file": "mace-mh-1.model", "head": "omat_pbe", "d3": True}},
 }
-MODEL = "mpa0"         # the current model: edit this line per submission
+MODEL = "omat0"         # the current model: edit this line per submission
 
 # every framework and its sites: T labels ("T4") for a single Al, or pair
 # names from the table step 0 prints ("T2-T4_5.65") for two Al
@@ -152,7 +152,7 @@ TS_HARMONIC_SLURM_TIME = "01:00:00"
 # --------------------------------------------------------------------------
 
 TS_SELLA_REACTIONS = None       # None: every reaction in TS_harmonic; or e.g. [0, 3]
-TS_SELLA_STARTS = ("harmonic", "raw")   # "harmonic": step 3's ts_harmonic.xyz,
+TS_SELLA_STARTS = ("harmonic",)   # "harmonic": step 3's ts_harmonic.xyz,
                                 # "raw": the unrelaxed step 1 guess; drop one to skip it
 TS_SELLA_FMAX = 0.05            # eV/A, converged when every free atom is below this
 TS_SELLA_STEPS = 300            # Sella steps at most

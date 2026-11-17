@@ -5,8 +5,8 @@ that has all three into NEB/, and list the activation energies they give.
 A guess is collected only when
     initial   TS_harmonic/.../initial/endpoint.json: verdict ok, free relax converged
     final     TS_harmonic/.../final/endpoint.json:   verdict ok, free relax converged
-    TS        TS_sella/.../<start>/result.json: verdict "ts" for at least one start;
-              with both starts a TS, the lower-energy one is taken
+    TS        TS_sella/.../<start>/result.json: verdict "ts" for a start in
+              settings.TS_SELLA_STARTS; with more than one, the lower-energy one is taken
 
     <RUN_DIR>/NEB/<i>_rxn/pair_<k>/<stem>/initial.xyz   from TS_harmonic/.../initial/initial.xyz
     <RUN_DIR>/NEB/<i>_rxn/pair_<k>/<stem>/ts.xyz        from TS_sella/.../<start>/ts_sella.xyz
@@ -89,7 +89,7 @@ def best_ts(sella_dir):
     """(start, result.json dict, ts_sella.xyz path) of the lowest-energy start
     whose verdict is "ts", else None."""
     found = []
-    for start in subdirs(sella_dir):
+    for start in settings.TS_SELLA_STARTS:
         run_dir = os.path.join(sella_dir, start)
         result = load(os.path.join(run_dir, layout.TS_SELLA_RESULT))
         structure = os.path.join(run_dir, layout.TS_SELLA_STRUCTURE)
