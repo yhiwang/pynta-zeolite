@@ -2,6 +2,7 @@
 from scripts/settings.py, so the DFT stage always works on the same run as
 the pipeline. Edit here, not in the dft scripts."""
 
+import sys
 import settings                 # the dft scripts put scripts/ on sys.path first
 
 # --------------------------------------------------------------------------
@@ -44,6 +45,11 @@ SP_LIMIT = None                 # submit at most this many new configs per run;
                                 # set 2-3 for a timing test first
 SP_LANES = 6                    # at most this many jobs running at a time (6 x 32 = 192 cores)
 
+DFT_DEVICE = "cpu"              # "cpu" or "gpu": the VASP build dft/02 runs; the values of
+                                # both are in scripts/machine.py. dft/03 is always CPU
+if DFT_DEVICE not in ("cpu", "gpu"):
+    sys.exit('dft_settings.py: DFT_DEVICE = %r is not "cpu" or "gpu"' % DFT_DEVICE)
+
 VASP_BINARY = "vasp_gam"        # Gamma-point only build, matches kpts below
 
 # the lab's settings (RPBE-D3(BJ), 400 eV) as single points, closed shell
@@ -69,6 +75,10 @@ SP_VASP = dict(
     lcharg=False,
     kpts=(1, 1, 1),
     gamma=True,
+)
+
+GPU_VASP_CHANGES = dict(        # applied on top of SP_VASP when DFT_DEVICE = "gpu"
+    nsim=16,                    # bands worked on at one time: speed only, same energy
 )
 
 SP_SLURM_TASKS = 32             # MPI ranks on one node

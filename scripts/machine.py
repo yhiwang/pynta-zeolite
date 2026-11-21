@@ -35,6 +35,10 @@ if MACHINE == "hive":
     VASP_CPUS_PER_RANK = 1
     VASP_PP_PATH = os.path.expanduser("~/vasp_pp")   # potpaw_PBE/ is a link to the
                                 # lab's grp_shared/PBE64 or PBE54 -- never mix them
+    # GPU VASP (DFT_DEVICE = "gpu" in dft/dft_settings.py): not set up on Hive
+    VASP_GPU_SETUP = ["SET_ME"]
+    VASP_GPU_LAUNCH = "SET_ME"
+    VASP_GPU_THREADS = "SET_ME"
 elif MACHINE == "perlmutter":
     PYTHON = "/global/common/software/m3548/ivan1007/envs/pyntaz-slim/bin/python"
     CPU_ACCOUNT = "m3548"
@@ -51,10 +55,20 @@ elif MACHINE == "perlmutter":
     GPU_CPUS = 32               # the shared GPU queue requires exactly 32 cores per GPU
     GPU_MEMORY = "48G"          # Slurm counts memory as cores too: about 54G at most for 32
     FT_MACE_RUN_TRAIN = "/global/common/software/m3548/ivan1007/envs/mace-ft/bin/mace_run_train"
-    VASP_SETUP = ["SET_ME"]
-    VASP_LAUNCH = "SET_ME"
-    VASP_CPUS_PER_RANK = "SET_ME"
-    VASP_PP_PATH = "SET_ME"
+    # CPU VASP, tested Nov 2026: 32 ranks, 114 s for a 289-atom single point
+    VASP_SETUP = ["module load vasp/6.4.3-cpu",
+                  "export OMP_PLACES=threads", "export OMP_PROC_BIND=spread"]
+    VASP_LAUNCH = "srun -n $SLURM_NTASKS -c 2 --cpu-bind=cores"
+    VASP_CPUS_PER_RANK = 2      # NERSC: never less than 2 on a CPU node
+    VASP_PP_PATH = "/global/common/software/nersc9/vasp/dependencies/pseudopotentials/PBE"
+    # GPU VASP (DFT_DEVICE = "gpu" in dft/dft_settings.py), tested Nov 2026: 86 s
+    # for the same single point. One MPI rank on one GPU; the threads are for
+    # the parts of VASP that stay on the CPU, and 16 is every real core of the
+    # 32 CPUs of a one-GPU job (32 threads were slower)
+    VASP_GPU_SETUP = ["module load vasp/6.4.3-gpu",
+                      "export OMP_PLACES=threads", "export OMP_PROC_BIND=spread"]
+    VASP_GPU_LAUNCH = "srun -n 1 -c $SLURM_CPUS_PER_TASK -G 1 --cpu-bind=cores --gpu-bind=none"
+    VASP_GPU_THREADS = 16
 else:
     sys.exit('MACHINE = "%s" in scripts/settings.py is not in scripts/machine.py '
              '(known: hive, perlmutter)' % MACHINE)

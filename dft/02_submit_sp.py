@@ -68,7 +68,7 @@ JOB_TEMPLATE = """#!/bin/bash
 #SBATCH --no-requeue
 {dependency}
 {setup}
-export OMP_NUM_THREADS=1
+export OMP_NUM_THREADS={threads}
 cd "$SLURM_SUBMIT_DIR"
 {launch} {binary} > vasp.out
 if grep -q "General timing and accounting" OUTCAR 2>/dev/null; then
@@ -119,18 +119,26 @@ def write_inputs(folder, relative, lane=None):
     ``lane`` the job is named sp_lane<NN> and waits for the previous job of
     that name (--dependency=singleton), so at most SP_LANES run at once."""
     from ase.calculators.vasp import Vasp
+    gpu = ds.DFT_DEVICE == "gpu"
     if not all(os.path.isfile(os.path.join(folder, name)) for name in VASP_INPUTS):
         atoms = read(os.path.join(folder, layout.DFT_CONFIG))
         atoms.pbc = True
-        Vasp(directory=folder, **ds.SP_VASP).write_input(atoms)
+        params = dict(ds.SP_VASP, **ds.GPU_VASP_CHANGES) if gpu else ds.SP_VASP
+        Vasp(directory=folder, **params).write_input(atoms)
+    name = job_name(relative) if lane is None else "sp_lane%02d" % lane
+    if gpu:                 # one GPU, one MPI rank, threads on the CPUs of the job
+        header = machine.sbatch_header(machine.GPU_CPUS, machine.GPU_MEMORY,
+                                       ds.SP_SLURM_TIME, name=name, gpu=True)
+    else:
+        header = machine.sbatch_header(machine.VASP_CPUS_PER_RANK, ds.SP_SLURM_MEMORY,
+                                       ds.SP_SLURM_TIME, name=name, tasks=ds.SP_SLURM_TASKS)
     with open(os.path.join(folder, layout.JOB_SCRIPT), "w") as handle:
         handle.write(JOB_TEMPLATE.format(
-            header=machine.sbatch_header(
-                machine.VASP_CPUS_PER_RANK, ds.SP_SLURM_MEMORY, ds.SP_SLURM_TIME,
-                name=job_name(relative) if lane is None else "sp_lane%02d" % lane,
-                tasks=ds.SP_SLURM_TASKS),
+            header=header,
             dependency="" if lane is None else "#SBATCH --dependency=singleton\n",
-            setup="\n".join(machine.VASP_SETUP), launch=machine.VASP_LAUNCH,
+            setup="\n".join(machine.VASP_GPU_SETUP if gpu else machine.VASP_SETUP),
+            threads=machine.VASP_GPU_THREADS if gpu else 1,
+            launch=machine.VASP_GPU_LAUNCH if gpu else machine.VASP_LAUNCH,
             binary=ds.VASP_BINARY))
 
 

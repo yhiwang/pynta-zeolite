@@ -48,7 +48,7 @@ def write_job(folder, element):
             header=machine.sbatch_header(
                 machine.VASP_CPUS_PER_RANK, ds.SP_SLURM_MEMORY, ds.ATOM_SLURM_TIME,
                 name="atom_%s" % element, tasks=ds.ATOM_SLURM_TASKS),
-            dependency="", setup="\n".join(machine.VASP_SETUP),
+            dependency="", setup="\n".join(machine.VASP_SETUP), threads=1,
             launch=machine.VASP_LAUNCH, binary=ds.VASP_BINARY))
 
 
