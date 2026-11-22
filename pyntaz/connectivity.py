@@ -33,6 +33,7 @@ from networkx import Graph
 from networkx.algorithms.isomorphism import GraphMatcher
 
 from .adjlist import parse_adjacency_list
+from .harmonic_relax import adsorbate_bonds
 
 
 def read_graph(adjlist):
@@ -160,3 +161,37 @@ def matching_maps(atoms, graph, frame, atom_map, strict, cutoff):
         if not connectivity_problems(atoms, graph, frame, candidate, strict, cutoff):
             maps.append(dict(sorted(candidate.items())))
     return sorted(maps, key=lambda m: list(m.values()))
+
+
+def image_problems(image, start, bonds, n_framework, sites=(), cutoff=1.25, alone=1.5):
+    """Bond check of one image against the raw guess ``start`` of the same
+    guess (same atom order). ``bonds`` are the reacting bonds, (i, j) or
+    (i, j, change): they may be bonded or broken, no other bond may change.
+
+    Returns a list of problems, empty for a good image:
+
+        ("broken", i, j)   a bond of the raw guess that is not a reacting
+                           bond is gone (both atoms in the graph: the
+                           adsorbate and the seated oxygens ``sites``)
+        ("extra", i, j)    a bond that the raw guess does not have and that
+                           is not a reacting bond
+        ("alone", i)       an adsorbate atom with no atom within
+                           ``alone`` x (r_i + r_j)
+
+    Bonded is r < ``cutoff`` x (r_i + r_j), minimum image. "broken" and
+    "extra" are the ``other`` bonds of :func:`harmonic_relax.endpoint_check`.
+    "alone" catches a reacting atom that left: its bonds are reacting bonds,
+    so the first two rules do not see it.
+    """
+    changing = [tuple(bond[:2]) for bond in bonds]
+    graph = set(range(n_framework, len(image))) | {int(s) for s in sites}
+    before = adsorbate_bonds(start, n_framework, cutoff, skip=changing)
+    after = adsorbate_bonds(image, n_framework, cutoff, skip=changing)
+    problems = [("broken", i, j) for i, j in sorted(before - after) if i in graph and j in graph]
+    problems += [("extra", i, j) for i, j in sorted(after - before)]
+    for i in range(n_framework, len(image)):
+        others = [j for j in range(len(image)) if j != i]
+        r, limit = _distances_and_limits(image, i, others, alone)
+        if not (r < limit).any():
+            problems.append(("alone", i))
+    return problems

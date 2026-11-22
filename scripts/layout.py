@@ -76,6 +76,13 @@ DFT_CONFIG = "config.extxyz"          # DFT_sp/.../f<frame>/: one structure, MAC
 DFT_SOURCE = "source.json"            # DFT_sp/.../f<frame>/: where the frame came from
 DFT_MANIFEST = "manifest.csv"         # DFT_sp/: one row per collected config
 DFT_ALL_CONFIGS = "all_configs.extxyz"   # DFT_sp/: every collected config, for ase gui
+DFT_SP = "DFT_sp"                     # <framework folder>/DFT_sp/: the pool and the picks of all sites
+DFT_POOL = "pool"                     # DFT_sp/pool/<i>_rxn/: every structure dft/01 collected
+DFT_POOL_CONFIGS = "pool.extxyz"      # DFT_sp/pool/<i>_rxn/: the structures, MACE labels kept as mace_*
+DFT_POOL_TABLE = "pool.csv"           # DFT_sp/pool/<i>_rxn/: one row per structure, same order
+DFT_SELECTED = "selected.csv"         # DFT_sp/<i>_rxn/: the picks of dft/02, in pick order
+DFT_REJECTED_CONFIGS = "rejected.extxyz"   # DFT_sp/pool/<i>_rxn/: the structures a dft/01 check removed
+DFT_REJECTED_TABLE = "rejected.csv"        # DFT_sp/pool/<i>_rxn/: one row per removed structure, with the reason
 TS_COLLECT_STATES = {"initial": "initial.xyz", "ts": "ts.xyz", "final": "final.xyz"}  # DFT_TS/.../<stem>/ (step 7)
 TS_COLLECT_INFO = "ts_info.json"      # DFT_TS/.../<stem>/: reaction, site, bonds, NEB quality, MACE energies
 TS_COLLECT_CSV = "ts_collected.csv"   # DFT_TS/: one row per collected TS, with the ranking
@@ -102,6 +109,9 @@ def run_dirs(model, round_name, framework, sites):
     return [(site, os.path.join(RUNS, model, round_name, framework, site))
             for site in sites]
 
+def framework_dir(model, round_name, framework):
+    """runs/<model>/<round>/<framework>, the folder that holds the site folders."""
+    return os.path.join(RUNS, model, round_name, framework)
 
 class RunLayout:
     """The sub-directories of one run directory."""
@@ -204,3 +214,25 @@ def harmonic_files(state):
     if state == "ts":
         return TS_HARMONIC_STRUCTURE, TS_HARMONIC_TRAJECTORY, TS_HARMONIC_LOG
     return state + ".xyz", state + ".traj", state + ".log"
+
+POOL_FILES = ("raw", "ts_harmonic", "initial", "final", "ts_sella", "band", "neb_start", "neb_band")
+POOL_FIRST_BAND = ("neb_start",)      # files that hold every band of the NEB: dft/01 takes only the
+                                      # first one, the start band (band.json gives its size)
+
+
+def pool_files(run, reaction, pair, stem):
+    """{name: path} of the files dft/01 can collect from, for one guess of
+    the RunLayout ``run``: the start file and the result file of steps 3,
+    4 and 6. ``reaction`` and ``pair`` are the folder names."""
+    guess = os.path.join(run.ts_harmonic, reaction, pair, stem)
+    neb = os.path.join(run.neb, reaction, pair, stem)
+    return {
+        "raw": initial_guess_path(guess),
+        "ts_harmonic": os.path.join(guess, harmonic_files("ts")[0]),
+        "initial": os.path.join(harmonic_job_dir(guess, "initial"), harmonic_files("initial")[0]),
+        "final": os.path.join(harmonic_job_dir(guess, "final"), harmonic_files("final")[0]),
+        "ts_sella": os.path.join(run.ts_sella, reaction, pair, stem, "harmonic", TS_SELLA_STRUCTURE),
+        "band": os.path.join(neb, NEB_BAND),
+        "neb_start": os.path.join(neb, NEB_TRAJECTORY),
+        "neb_band": os.path.join(neb, NEB_FINAL_BAND),
+    }

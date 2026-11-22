@@ -9,31 +9,31 @@ import settings                 # the dft scripts put scripts/ on sys.path first
 # dft step 1: collect configs (sella / harmonic / neb)
 # --------------------------------------------------------------------------
 
-COLLECT_WRITE = True            # False: count and report only (dry run)
-COLLECT_ROUND = settings.ROUND  # configs go to DFT_sp/<round>/<source>/
-COLLECT_SOURCES = ("sella", "harmonic", "neb")   # any of these three; a source
-                                # with nothing new just reports 0
+COLLECT_WRITE = True           # False: count and report only (dry run)
 COLLECT_REACTIONS = None        # None: every reaction; or e.g. [0, 3]
-COLLECT_MIN_DIST = 0.7          # A, frames with two atoms closer than this are dropped
-COLLECT_STRIDE = 1              # look at every Nth step (1: all of them)
-COLLECT_MIN_DISP = 0.1          # A, keep a frame once some atom has moved this far
+COLLECT_FILES = (               # names from layout.pool_files
+    "ts_harmonic",              # ts_harmonic.xyz: step 3 TS, where step 4 starts
+    "initial",                  # initial/initial.xyz: step 3 initial state
+    "final",                    # final/final.xyz: step 3 final state
+    "ts_sella",                 # harmonic/ts_sella.xyz: step 4 result
+    "neb_start",                # neb.traj, first band only: the band step 6 starts from
+    "neb_band",                 # neb_band.traj: the band where step 6 stopped
+)                               # also there, without MACE values: "raw" (<stem>_init.xyz), "band" (band.traj)
+COLLECT_MIN_DIST = 0.7          # A, a structure with two atoms closer than this is dropped
+COLLECT_MAX_FORCE = 20.0        # eV/A, a structure with a larger stored MACE force on any atom
+                                # is dropped (a structure with no stored force: distance check only)
+COLLECT_ALONE = 1.5             # bond check: an adsorbate atom with no atom within this x (r_i + r_j)
+                                # is alone. Bonded is settings.TS_HARMONIC_BOND_CUTOFF x (r_i + r_j)
 
-# sella: frames of TS_sella/.../<start>/sella.traj
-COLLECT_STARTS = ("harmonic",)
-COLLECT_VERDICTS = None         # None: every verdict; or e.g. ("ts", "wrong_mode")
-COLLECT_MAX_FRAMES = 3          # per trajectory, end points included; None: no cap
-
-# harmonic: initial / final states of TS_harmonic (scripts/03)
-COLLECT_HARMONIC_STATES = ("initial", "final")
-COLLECT_HARMONIC_VERDICTS = None    # None: every verdict; or ("ok",)
-COLLECT_HARMONIC_MAX_FRAMES = 1     # 1: only the relaxed structure; more adds
-                                    # frames from the relax trajectory
-
-# neb: images of NEB/.../<stem>/
-COLLECT_NEB_BANDS = ("final_band",) # "start_band" (band.traj), "final_band" (neb_band.traj)
-COLLECT_NEB_ENDPOINTS = False       # final band's end points; they are close to the
-                                    # harmonic end points, so off when harmonic is collected
-COLLECT_NEB_VERDICTS = None         # None: every verdict; or ("connected",)
+SELECT_WRITE = True            # False: pick and report only (dry run)
+SELECT_N = 150                 # picks for each reaction in this round: you choose it
+SELECT_SOAP = dict(             # DScribe SOAP on the adsorbate, the site Al and its first-shell O
+    r_cut=5.0,                  # A, how far each atom looks
+    n_max=8,                    # radial functions
+    l_max=6,                    # angular functions
+    sigma=0.5,                  # A, width of the atom Gaussians
+)
+SELECT_SAME = 1e-6              # SOAP distance below which a structure is a copy of a picked one
 
 # --------------------------------------------------------------------------
 # dft step 2: VASP single points on the collected configs (one SLURM job per
