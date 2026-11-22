@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-"""DFT step 2: one VASP single point per config collected by step 1.
+"""DFT step 2: one VASP single point per structure that dft/02_select_configs.py picked.
 
     python dft/02_submit_sp.py                    # submit new configs, report the rest
     python dft/02_submit_sp.py --resubmit-failed  # ... and submit the failed ones again
 
-For every ``<RUN_DIR>/DFT_sp/.../f<frame>/config.extxyz`` it writes, into
-the same folder:
+For every ``runs/<MODEL>/<ROUND>/<FRAMEWORK>/DFT_sp/<i>_rxn/<site>/<pair>/<stem>/<name>/config.extxyz``
+it writes, into the same folder:
 
     INCAR POSCAR KPOINTS POTCAR   from SP_VASP in dft/dft_settings.py
     ase-sort.dat                  VASP's element-sorted order -> config order
@@ -108,10 +108,9 @@ def queued_ids():
 
 
 def job_name(relative):
-    """sp_R0_p03_f0012 -- short enough for squeue."""
-    rxn, pair, _, start, frame = relative.split(os.sep)[-5:]
-    return "sp_R%s_p%s_%s_%s" % (rxn.split("_")[0], pair.split("_")[-1],
-                                start[0], frame)
+    """sp_R0_T1_p03_neb_band_0003 -- reaction, site, pair, structure."""
+    rxn, site, pair, _, name = relative.split(os.sep)[-5:]
+    return "sp_R%s_%s_p%s_%s" % (rxn.split("_")[0], site, pair.split("_")[-1], name)
 
 
 def write_inputs(folder, relative, lane=None):
@@ -172,17 +171,18 @@ def parse_args(argv):
 
 def main():
     resubmit = parse_args(sys.argv[1:])
-    run = layout.RunLayout(settings.RUN_DIR)
-    if not os.path.isdir(run.dft_sp):
-        sys.exit("%s not found -- run dft/01_collect_configs.py first" % run.dft_sp)
+    dft_sp = os.path.join(layout.framework_dir(settings.MODEL, settings.ROUND, settings.FRAMEWORK),
+                          layout.DFT_SP)
+    if not os.path.isdir(dft_sp):
+        sys.exit("%s not found -- run dft/01 and dft/02_select_configs.py first" % dft_sp)
     potpaw = os.path.join(machine.VASP_PP_PATH, "potpaw_PBE")
     if not os.path.isdir(potpaw):
         sys.exit("no POTCARs at %s -- link the lab set there first" % potpaw)
     os.environ["VASP_PP_PATH"] = machine.VASP_PP_PATH
 
-    configs = config_folders(run.dft_sp)
+    configs = config_folders(dft_sp)
     if not configs:
-        sys.exit("no %s under %s" % (layout.DFT_CONFIG, run.dft_sp))
+        sys.exit("no %s under %s" % (layout.DFT_CONFIG, dft_sp))
     in_queue = queued_ids()
     if resubmit and in_queue is None:
         print("squeue unavailable: cannot tell failed from queued, nothing is resubmitted")
