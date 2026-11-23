@@ -56,7 +56,7 @@ from ase.io import read
 
 OUTCAR = "OUTCAR"
 VASP_INPUTS = ("INCAR", "POSCAR", "KPOINTS", "POTCAR")
-FINISHED_MARK = "General timing and accounting"   # last block of a finished OUTCAR
+FINISHED_MARK = "General timing and accounting"   # the timing block of a finished OUTCAR
 RESUBMIT_FLAG = "--resubmit-failed"
 STALE_OUTPUTS = ("OUTCAR", "OSZICAR", "CONTCAR", "vasprun.xml", "vaspout.h5",
                  "vasp.out", "job.out")            # plus layout.JOB_ERR
@@ -90,10 +90,8 @@ def finished(folder):
     path = os.path.join(folder, OUTCAR)
     if not os.path.isfile(path):
         return False
-    with open(path, "rb") as handle:          # the mark is near the end
-        handle.seek(0, os.SEEK_END)
-        handle.seek(max(0, handle.tell() - 20000))
-        return FINISHED_MARK.encode() in handle.read()
+    with open(path, "rb") as handle:          # the whole file: the GPU build writes a long
+        return FINISHED_MARK.encode() in handle.read()   # profile table after the mark
 
 
 def queued_ids():

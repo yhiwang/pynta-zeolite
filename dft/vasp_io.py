@@ -9,22 +9,20 @@ from ase.io import read
 
 OUTCAR = "OUTCAR"
 SORT_FILE = "ase-sort.dat"                        # written by ase in dft step 2
-FINISHED_MARK = "General timing and accounting"   # last block of a finished OUTCAR
+FINISHED_MARK = "General timing and accounting"   # the timing block of a finished OUTCAR
 UNCONVERGED_MARK = "EDIFF was not reached"        # VASP 6: SCF hit NELM
 POSITION_TOL = 1e-3                               # A, config vs OUTCAR geometry
 
 
-def _tail(path, size=20000):
-    with open(path, "rb") as handle:
-        handle.seek(0, os.SEEK_END)
-        handle.seek(max(0, handle.tell() - size))
-        return handle.read()
-
-
 def finished(folder):
-    """True when VASP ran to the end (whether or not the SCF converged)."""
+    """True when VASP ran to the end (whether or not the SCF converged). The
+    whole file is searched: the GPU build writes a long profile table after
+    the timing block, so the mark is not always near the end."""
     path = os.path.join(folder, OUTCAR)
-    return os.path.isfile(path) and FINISHED_MARK.encode() in _tail(path)
+    if not os.path.isfile(path):
+        return False
+    with open(path, "rb") as handle:
+        return FINISHED_MARK.encode() in handle.read()
 
 
 def scf_converged(folder):
