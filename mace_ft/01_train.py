@@ -1,18 +1,32 @@
 #!/usr/bin/env python
-"""MACE step 1: fine-tune the foundation model on the DFT training set.
+"""MACE step 1: fine-tune the foundation model, one model per training set of dft/05.
 
     python mace_ft/01_train.py         # FT_SUBMIT = False: write config.yaml + job.sh only
 
-Writes ``<RUN_DIR>/MACE_ft/<FT_NAME>/config.yaml`` (every mace_run_train
-option, readable and kept with the results) and ``job.sh`` (one GPU; the
-cluster values come from scripts/machine.py), then submits it. The job
-runs in that folder, so the logs, checkpoints, the replay subset and the
-final model all land there:
+dft/05 wrote the training files of N models under
+``runs/<MODEL>/<ROUND>/<FRAMEWORK>/DFT_sp/training/``: one test.extxyz for
+all models, and model_<k>/train.extxyz + valid.extxyz. For every model_<k>
+there, this script writes
+``runs/<MODEL>/<ROUND>/<FRAMEWORK>/MACE_ft/model_<k>/config.yaml`` (every
+mace_run_train option, readable and kept with the results) and ``job.sh``
+(one GPU; the cluster values come from scripts/machine.py), then submits
+it. The job runs in that folder, so the logs, checkpoints, the replay
+subset and the final model all land there:
 
-    <FT_NAME>.model            the fine-tuned model (GPU)
-    <FT_NAME>_compiled.model   same, compiled
-    *_cpu.model                versions for CPU nodes (the pipeline's Sella runs)
+    <name>.model            the fine-tuned model (GPU);
+                            <name> = <MODEL>_<ROUND>_<FRAMEWORK>_model_<k>
+    <name>_compiled.model   same, compiled
+    *_cpu.model             versions for CPU nodes (the pipeline's Sella runs)
     logs/, results/, checkpoints/
+
+The models differ only in their train and valid files. The foundation
+model, the replay data, the test file, FT_SEED and every other option are
+the same. The seed must be the same: MACE draws the 10% validation split
+of the replay with it, so one seed gives every model the same replay.
+
+A model with a job.id is not submitted again: after TRAIN_MODELS was raised
+and dft/05 was run again, only the new models are submitted. Delete job.id
+(and the folder's outputs) to train a model again.
 
 Multihead replay fine-tuning: the training data becomes its own head, and
 replay structures are trained alongside so the model keeps its general
@@ -31,11 +45,8 @@ count when padding is off). With FT_PSEUDOLABEL_REPLAY the replay labels
 come from the foundation model -- needed for a non-MP foundation such as
 OMAT-0, because MACE loads the MP file for every pt_train_file name.
 
-E0s come from the config_type=IsolatedAtom structures in train.extxyz (dft
-step 3 + step 4); the script stops if any element in the data lacks one.
-
-job.id guards against submitting the same run twice; delete it (and the
-folder's outputs) to start over, or rerun with a new FT_NAME.
+E0s come from the config_type=IsolatedAtom structures in each train.extxyz
+(dft/04 + dft/05); the script stops if any element in the data lacks one.
 """
 
 import os
@@ -50,10 +61,6 @@ import settings
 from ase.data import chemical_symbols
 from ase.io import read
 
-TRAINING_DIR = "training"                  # DFT_sp/, written by dft step 4
-FILES = {"train_file": "train.extxyz", "valid_file": "valid.extxyz",
-         "test_file": "test.extxyz"}
-FT_DIR = "MACE_ft"                         # <RUN_DIR>/MACE_ft/<FT_NAME>/
 CONFIG = "config.yaml"
 REPLAY_CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME",
                                            os.path.expanduser("~/.cache")),
@@ -116,12 +123,17 @@ def yaml_value(value):
 
 
 def main():
-    run = layout.RunLayout(settings.RUN_DIR)
-    data_dir = os.path.abspath(os.path.join(run.dft_sp, TRAINING_DIR))
-    paths = {key: os.path.join(data_dir, name) for key, name in FILES.items()}
-    for path in paths.values():
-        if not os.path.isfile(path):
-            sys.exit("%s not found -- run dft/04_build_training_set.py first" % path)
+    frame_dir = layout.framework_dir(settings.MODEL, settings.ROUND, settings.FRAMEWORK)
+    data_dir = os.path.abspath(os.path.join(frame_dir, layout.DFT_SP, layout.DFT_TRAINING))
+    prefix = layout.DFT_MODEL_PREFIX
+    models = []
+    if os.path.isdir(data_dir):
+        models = sorted((name for name in os.listdir(data_dir)
+                         if name.startswith(prefix) and name[len(prefix):].isdigit()),
+                        key=lambda name: int(name[len(prefix):]))
+    if not models:
+        sys.exit("no %s<k> folder in %s -- run dft/05_split_training_data.py first"
+                 % (prefix, data_dir))
     if fs.FT_REPLAY == "mp":
         replay = REPLAY_CACHE
     else:
@@ -134,10 +146,6 @@ def main():
     if not os.access(machine.FT_MACE_RUN_TRAIN, os.X_OK):
         sys.exit("%s not found -- is the mace-ft env where FT_MACE_RUN_TRAIN in "
                  "scripts/machine.py says?" % machine.FT_MACE_RUN_TRAIN)
-    missing, n_train = check_e0s(paths["train_file"])
-    if missing:
-        sys.exit("no IsolatedAtom E0 in train.extxyz for %s -- run dft/03 and then "
-                 "dft/04 again" % ", ".join(missing))
 
     if fs.FT_FILTER_TYPE_PT not in ("none", "combinations", "exclusive", "inclusive"):
         sys.exit("FT_FILTER_TYPE_PT must be none, combinations, exclusive or inclusive")
@@ -154,61 +162,7 @@ def main():
     else:                                   # MACE reads the whole file
         n_replay, capped = n_all, False
 
-    folder = os.path.abspath(os.path.join(settings.RUN_DIR, FT_DIR, fs.FT_NAME))
-    id_path = os.path.join(folder, layout.JOB_ID)
-    if os.path.isfile(id_path):
-        with open(id_path) as handle:
-            sys.exit("%s already submitted (job %s) -- use a new FT_NAME, or delete "
-                     "job.id to resubmit" % (folder, handle.read().strip()))
-    os.makedirs(folder, exist_ok=True)
-
-    options = {
-        "name": fs.FT_NAME,
-        "foundation_model": os.path.abspath(fs.FT_FOUNDATION),
-        "multiheads_finetuning": True,
-        "pt_train_file": "mp" if fs.FT_REPLAY == "mp" else replay,
-        "num_samples_pt": n_replay,
-        "pseudolabel_replay": fs.FT_PSEUDOLABEL_REPLAY,
-        "filter_type_pt": fs.FT_FILTER_TYPE_PT,
-        "atomic_numbers": str(fs.FT_ATOMIC_NUMBERS),   # a string: MACE refuses a yaml list here
-        "disallow_random_padding_pt": not fs.FT_PADDING_PT,
-        **paths,
-        "energy_key": "REF_energy",
-        "forces_key": "REF_forces",
-        "compute_stress": False,
-        "stress_weight": 0.0,
-        "loss": "weighted",
-        "energy_weight": fs.FT_ENERGY_WEIGHT,
-        "forces_weight": fs.FT_FORCES_WEIGHT,
-        "swa": fs.FT_STAGE_TWO,
-        "start_swa": fs.FT_STAGE_TWO_START,
-        "swa_energy_weight": fs.FT_STAGE_TWO_ENERGY_WEIGHT,
-        "swa_forces_weight": fs.FT_STAGE_TWO_FORCES_WEIGHT,
-        "max_num_epochs": fs.FT_EPOCHS,
-        "batch_size": fs.FT_BATCH_SIZE,
-        "valid_batch_size": fs.FT_BATCH_SIZE,
-        "default_dtype": fs.FT_DTYPE,
-        "device": "cuda",
-        "seed": fs.FT_SEED,
-        "error_table": "TotalMAE",
-        "eval_interval": 1,
-        "save_cpu": True,
-        "restart_latest": True,
-    }
-    if not fs.FT_STAGE_TWO:
-        for key in ("swa", "start_swa", "swa_energy_weight", "swa_forces_weight"):
-            options.pop(key)
-    with open(os.path.join(folder, CONFIG), "w") as handle:
-        handle.write("# written by mace_ft/01_train.py -- edit mace_ft/ft_settings.py\n")
-        for key, value in options.items():
-            handle.write("%s: %s\n" % (key, yaml_value(value)))
-    with open(os.path.join(folder, layout.JOB_SCRIPT), "w") as handle:
-        handle.write(JOB_TEMPLATE.format(
-            header=machine.sbatch_header(machine.GPU_CPUS, machine.GPU_MEMORY,
-                                         fs.FT_SLURM_TIME, name=fs.FT_NAME, gpu=True),
-            cpus=machine.GPU_CPUS, trainer=machine.FT_MACE_RUN_TRAIN, config=CONFIG))
-
-    print("training data  %s  (%d configs + E0s)" % (data_dir, n_train))
+    print("training data  %s  (%s)" % (data_dir, ", ".join(models)))
     print("foundation     %s" % fs.FT_FOUNDATION)
     print("replay         %d of %d configs in %s pass %s %s; using %d%s, padding %s, "
           "pseudolabels %s"
@@ -221,20 +175,92 @@ def main():
              fs.FT_STAGE_TWO_ENERGY_WEIGHT, fs.FT_STAGE_TWO_FORCES_WEIGHT)
           if fs.FT_STAGE_TWO else "weights        E:F = %g:%g"
           % (fs.FT_ENERGY_WEIGHT, fs.FT_FORCES_WEIGHT))
-    print("wrote          %s/{%s, %s}" % (folder, CONFIG, layout.JOB_SCRIPT))
+    print("seed           %d, the same for every model\n" % fs.FT_SEED)
+
+    test_file = os.path.join(data_dir, layout.DFT_TEST)
+    for model in models:
+        paths = {"train_file": os.path.join(data_dir, model, layout.DFT_TRAIN),
+                 "valid_file": os.path.join(data_dir, model, layout.DFT_VALID),
+                 "test_file": test_file}
+        for path in paths.values():
+            if not os.path.isfile(path):
+                sys.exit("%s not found -- run dft/05_split_training_data.py first" % path)
+        folder = os.path.abspath(os.path.join(frame_dir, layout.MACE_FT, model))
+        id_path = os.path.join(folder, layout.JOB_ID)
+        if os.path.isfile(id_path):
+            with open(id_path) as handle:
+                print("%-9s already submitted (job %s)" % (model, handle.read().strip()))
+            continue
+        missing, n_train = check_e0s(paths["train_file"])
+        if missing:
+            sys.exit("no IsolatedAtom E0 in %s for %s -- run dft/04 and then dft/05 again"
+                     % (paths["train_file"], ", ".join(missing)))
+        os.makedirs(folder, exist_ok=True)
+        name = "%s_%s_%s_%s" % (settings.MODEL, settings.ROUND, settings.FRAMEWORK, model)
+
+        options = {
+            "name": name,
+            "foundation_model": os.path.abspath(fs.FT_FOUNDATION),
+            "multiheads_finetuning": True,
+            "pt_train_file": "mp" if fs.FT_REPLAY == "mp" else replay,
+            "num_samples_pt": n_replay,
+            "pseudolabel_replay": fs.FT_PSEUDOLABEL_REPLAY,
+            "filter_type_pt": fs.FT_FILTER_TYPE_PT,
+            "atomic_numbers": str(fs.FT_ATOMIC_NUMBERS),   # a string: MACE refuses a yaml list here
+            "disallow_random_padding_pt": not fs.FT_PADDING_PT,
+            **paths,
+            "energy_key": "REF_energy",
+            "forces_key": "REF_forces",
+            "compute_stress": False,
+            "stress_weight": 0.0,
+            "loss": "weighted",
+            "energy_weight": fs.FT_ENERGY_WEIGHT,
+            "forces_weight": fs.FT_FORCES_WEIGHT,
+            "swa": fs.FT_STAGE_TWO,
+            "start_swa": fs.FT_STAGE_TWO_START,
+            "swa_energy_weight": fs.FT_STAGE_TWO_ENERGY_WEIGHT,
+            "swa_forces_weight": fs.FT_STAGE_TWO_FORCES_WEIGHT,
+            "max_num_epochs": fs.FT_EPOCHS,
+            "batch_size": fs.FT_BATCH_SIZE,
+            "valid_batch_size": fs.FT_BATCH_SIZE,
+            "default_dtype": fs.FT_DTYPE,
+            "device": "cuda",
+            "seed": fs.FT_SEED,
+            "error_table": "TotalMAE",
+            "eval_interval": 1,
+            "save_cpu": True,
+            "restart_latest": True,
+        }
+        if not fs.FT_STAGE_TWO:
+            for key in ("swa", "start_swa", "swa_energy_weight", "swa_forces_weight"):
+                options.pop(key)
+        with open(os.path.join(folder, CONFIG), "w") as handle:
+            handle.write("# written by mace_ft/01_train.py -- edit mace_ft/ft_settings.py\n")
+            for key, value in options.items():
+                handle.write("%s: %s\n" % (key, yaml_value(value)))
+        with open(os.path.join(folder, layout.JOB_SCRIPT), "w") as handle:
+            handle.write(JOB_TEMPLATE.format(
+                header=machine.sbatch_header(machine.GPU_CPUS, machine.GPU_MEMORY,
+                                             fs.FT_SLURM_TIME, name=name, gpu=True),
+                cpus=machine.GPU_CPUS, trainer=machine.FT_MACE_RUN_TRAIN, config=CONFIG))
+
+        if not fs.FT_SUBMIT:
+            print("%-9s would submit: %d train configs + E0s, wrote %s/{%s, %s}"
+                  % (model, n_train, folder, CONFIG, layout.JOB_SCRIPT))
+            continue
+        out = subprocess.run(["sbatch", layout.JOB_SCRIPT], cwd=folder,
+                             capture_output=True, text=True)
+        if out.returncode != 0:
+            sys.exit("sbatch failed:\n%s" % out.stderr)
+        job_id = out.stdout.strip().split()[-1]
+        with open(id_path, "w") as handle:
+            handle.write(job_id + "\n")
+        print("%-9s submitted job %s (%d train configs + E0s) -- follow it with: "
+              "tail -f %s/logs/*.log" % (model, job_id, n_train, folder))
+
     if not fs.FT_SUBMIT:
-        print("\ndry run: check config.yaml, then set FT_SUBMIT = True in "
+        print("\ndry run: check one config.yaml, then set FT_SUBMIT = True in "
               "mace_ft/ft_settings.py")
-        return
-    out = subprocess.run(["sbatch", layout.JOB_SCRIPT], cwd=folder,
-                         capture_output=True, text=True)
-    if out.returncode != 0:
-        sys.exit("sbatch failed:\n%s" % out.stderr)
-    job_id = out.stdout.strip().split()[-1]
-    with open(id_path, "w") as handle:
-        handle.write(job_id + "\n")
-    print("\nsubmitted job %s -- follow it with: tail -f %s/logs/*.log"
-          % (job_id, folder))
 
 
 if __name__ == "__main__":

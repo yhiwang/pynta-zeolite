@@ -90,6 +90,7 @@ DFT_TEST = "test.extxyz"              # DFT_sp/training/: the test set, the same
 DFT_TRAIN = "train.extxyz"            # DFT_sp/training/model_<k>/: the train set, with the isolated atoms
 DFT_VALID = "valid.extxyz"            # DFT_sp/training/model_<k>/: the valid set
 DFT_SPLIT = "split.csv"               # DFT_sp/training/: one row per structure, its set in each model
+MACE_FT = "MACE_ft"                   # <framework folder>/MACE_ft/model_<k>/: the fine-tune run of one model
 TS_COLLECT_STATES = {"initial": "initial.xyz", "ts": "ts.xyz", "final": "final.xyz"}  # DFT_TS/.../<stem>/ (step 7)
 TS_COLLECT_INFO = "ts_info.json"      # DFT_TS/.../<stem>/: reaction, site, bonds, NEB quality, MACE energies
 TS_COLLECT_CSV = "ts_collected.csv"   # DFT_TS/: one row per collected TS, with the ranking
