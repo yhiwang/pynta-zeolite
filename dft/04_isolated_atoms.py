@@ -22,14 +22,12 @@ import _common  # noqa: F401
 import dft_settings as ds
 import layout
 import machine
-import settings
 from ase import Atoms
 from ase.calculators.vasp import Vasp
 from ase.io import write
 from vasp_io import finished
 
-submit_sp = importlib.import_module("02_submit_sp")     # reuse its job template
-ATOMS_DIR = "DFT_atoms"                                 # <RUN_DIR>/DFT_atoms/<element>/
+submit_sp = importlib.import_module("03_submit_sp")     # reuse its job template
 
 
 def write_job(folder, element):
@@ -57,7 +55,7 @@ def main():
     if not os.path.isdir(potpaw):
         sys.exit("no POTCARs at %s -- link the lab set there first" % potpaw)
     os.environ["VASP_PP_PATH"] = machine.VASP_PP_PATH
-    root = os.path.join(settings.RUN_DIR, ATOMS_DIR)
+    root = os.path.join(layout.RUNS, layout.DFT_ATOMS)
     in_queue = submit_sp.queued_ids()
 
     for element in ds.ATOM_ELEMENTS:

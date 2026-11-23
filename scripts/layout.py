@@ -83,6 +83,13 @@ DFT_POOL_TABLE = "pool.csv"           # DFT_sp/pool/<i>_rxn/: one row per struct
 DFT_SELECTED = "selected.csv"         # DFT_sp/<i>_rxn/: the picks of dft/02, in pick order
 DFT_REJECTED_CONFIGS = "rejected.extxyz"   # DFT_sp/pool/<i>_rxn/: the structures a dft/01 check removed
 DFT_REJECTED_TABLE = "rejected.csv"        # DFT_sp/pool/<i>_rxn/: one row per removed structure, with the reason
+DFT_ATOMS = "DFT_atoms"               # runs/DFT_atoms/<element>/: the isolated atoms of dft/04, one copy for all runs
+DFT_TRAINING = "training"             # DFT_sp/training/: the data split of dft/05
+DFT_MODEL_PREFIX = "model_"           # DFT_sp/training/model_<k>/: the files of one model (model_dirname)
+DFT_TEST = "test.extxyz"              # DFT_sp/training/: the test set, the same for every model
+DFT_TRAIN = "train.extxyz"            # DFT_sp/training/model_<k>/: the train set, with the isolated atoms
+DFT_VALID = "valid.extxyz"            # DFT_sp/training/model_<k>/: the valid set
+DFT_SPLIT = "split.csv"               # DFT_sp/training/: one row per structure, its set in each model
 TS_COLLECT_STATES = {"initial": "initial.xyz", "ts": "ts.xyz", "final": "final.xyz"}  # DFT_TS/.../<stem>/ (step 7)
 TS_COLLECT_INFO = "ts_info.json"      # DFT_TS/.../<stem>/: reaction, site, bonds, NEB quality, MACE energies
 TS_COLLECT_CSV = "ts_collected.csv"   # DFT_TS/: one row per collected TS, with the ranking
@@ -136,6 +143,11 @@ def reaction_dirname(index):
 
 def pair_dirname(pair_id):
     return "pair_%02d" % pair_id
+
+
+def model_dirname(number):
+    """model_1, model_2, ...: the folder of one of the models trained on the same round."""
+    return "%s%d" % (DFT_MODEL_PREFIX, number)
 
 
 def initial_guess_path(config_dir):

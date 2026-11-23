@@ -109,14 +109,10 @@ ATOM_SLURM_TIME = "02:00:00"
 # dft step 4: training set from the finished single points
 # --------------------------------------------------------------------------
 
-TRAIN_SPLIT_BY = "config"       # "config": each config at random; "run": whole Sella runs
-TRAIN_VALID_FRACTION = 0.1      # share going to valid   <- set your proportions here
-TRAIN_TEST_FRACTION = 0.1       # share going to test       (the rest is train)
-TRAIN_HOLDOUT_REACTIONS = []    # e.g. [6]: these reactions go to test entirely
-TRAIN_SEED = 0                  # fixes the random draw (same seed = same split)
-TRAIN_MAX_FORCE = 20.0          # eV/A, configs with any larger DFT force are dropped
-TRAIN_ROUNDS = None             # None: every round under DFT_sp; or ("round1", "round2")
-TRAIN_SOURCES = None            # None: every source; or ("sella", "neb")
-TRAIN_KEEP_SPLITS = {           # earlier split.csv to honour: {prefix: path}, both under DFT_sp
-    "round1/sella": "round1/training_round1/split.csv",
-}
+TRAIN_MODELS = 2                # how many models to train on this round: model_1 .. model_<N>
+TRAIN_TEST_FRACTION = 0.1       # share of all structures in the test set (the same for every model)
+TRAIN_VALID_FRACTION = 0.1      # share of all structures each model holds out as valid
+                                # (a different draw for each model); the rest is train
+TRAIN_SEED = 0                  # fixes the draws: the same seed gives the same split
+TRAIN_MAX_FORCE = 20.0          # eV/A, a structure with a larger DFT force on any atom is
+                                # left out; None: no limit
