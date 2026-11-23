@@ -59,6 +59,11 @@ FRAMEWORK = "MOR"
 
 FIGURE = "mace_vs_dft_parity.png"
 MAX_POINTS = 40000              # force components drawn per panel (all are counted)
+# the figure with all reactions, in inches
+PANEL = 2.95                    # side of one square panel
+COLUMN_GAP = 0.65               # space between two columns
+ROW_GAP = 0.70                  # space between the energy row and the force row
+LEFT, RIGHT, BOTTOM, TOP = 0.75, 0.20, 0.60, 1.10      # space around the panels
 BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
 STYLE = {                       # file: (color = pipeline step, marker = file)
     "ts_harmonic": (BLUE, "o"),
@@ -267,8 +272,14 @@ for index in reactions:
     plt.close(fig)
     print("wrote %s" % out)
 
-# 5. all reactions: energy row, force row, one column per reaction
-fig, axes = plt.subplots(2, len(reactions), figsize=(3.6 * len(reactions), 8.0), squeeze=False)
+# 5. all reactions: energy row, force row, one column per reaction. The sizes are set
+# in inches and every slot is a square, so no label can end up under another panel
+n = len(reactions)
+width = LEFT + n * PANEL + (n - 1) * COLUMN_GAP + RIGHT
+height = BOTTOM + 2 * PANEL + ROW_GAP + TOP
+fig, axes = plt.subplots(2, n, figsize=(width, height), squeeze=False)
+fig.subplots_adjust(left=LEFT / width, right=1 - RIGHT / width, bottom=BOTTOM / height,
+                    top=1 - TOP / height, wspace=COLUMN_GAP / PANEL, hspace=ROW_GAP / PANEL)
 for column, index in enumerate(reactions):
     members = by_reaction[index]
     energy_panel(axes[0, column], members)
@@ -277,9 +288,10 @@ for column, index in enumerate(reactions):
 axes[0, 0].set_ylabel("MACE energy, relative  (eV)", color=INK2)
 axes[1, 0].set_ylabel("MACE force components  (eV/Å)", color=INK2)
 fig.legend(handles=legend_handles(), frameon=False, fontsize=10, ncol=len(files),
-           loc="upper center", bbox_to_anchor=(0.5, 0.955), labelcolor=INK2, handletextpad=0.3)
-fig.suptitle("%s    MACE vs DFT, %d single points" % (run_name, len(rows)), fontsize=13, color=INK)
-fig.tight_layout(rect=(0, 0, 1, 0.925))
+           loc="upper center", bbox_to_anchor=(0.5, 1 - 0.40 / height), labelcolor=INK2,
+           handletextpad=0.3)
+fig.suptitle("%s    MACE vs DFT, %d single points" % (run_name, len(rows)), fontsize=13, color=INK,
+             y=1 - 0.10 / height)
 out = os.path.join(dft_sp, FIGURE)
 fig.savefig(out, dpi=150)
 print("wrote %s" % out)
