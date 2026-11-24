@@ -91,6 +91,8 @@ DFT_TRAIN = "train.extxyz"            # DFT_sp/training/model_<k>/: the train se
 DFT_VALID = "valid.extxyz"            # DFT_sp/training/model_<k>/: the valid set
 DFT_SPLIT = "split.csv"               # DFT_sp/training/: one row per structure, its set in each model
 MACE_FT = "MACE_ft"                   # <framework folder>/MACE_ft/model_<k>/: the fine-tune run of one model
+ROUND_MODELS = "models"               # <framework folder>/models/model_<k>.model: the fine-tuned models a
+                                      # round runs with, round1 and later (round_model)
 TS_COLLECT_STATES = {"initial": "initial.xyz", "ts": "ts.xyz", "final": "final.xyz"}  # DFT_TS/.../<stem>/ (step 7)
 TS_COLLECT_INFO = "ts_info.json"      # DFT_TS/.../<stem>/: reaction, site, bonds, NEB quality, MACE energies
 TS_COLLECT_CSV = "ts_collected.csv"   # DFT_TS/: one row per collected TS, with the ranking
@@ -149,6 +151,13 @@ def pair_dirname(pair_id):
 def model_dirname(number):
     """model_1, model_2, ...: the folder of one of the models trained on the same round."""
     return "%s%d" % (DFT_MODEL_PREFIX, number)
+
+
+def round_model(model, round_name, framework, number):
+    """runs/<model>/<round>/<framework>/models/model_<k>.model: fine-tuned model
+    <k> that a round (round1 and later) runs with."""
+    return os.path.join(framework_dir(model, round_name, framework), ROUND_MODELS,
+                        model_dirname(number) + ".model")
 
 
 def initial_guess_path(config_dir):

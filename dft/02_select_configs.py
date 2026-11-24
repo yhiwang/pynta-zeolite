@@ -13,7 +13,7 @@ that are as different from each other as possible:
   2. Farthest point sampling: each pick is the structure farthest from all
      structures already picked. Already picked are the job folders of the
      reaction in this round and in the earlier rounds of the model
-     (settings.MODELS). With none, the first pick is the structure nearest
+     (settings.ROUNDS). With none, the first pick is the structure nearest
      to the average of the pool.
   3. It stops at SELECT_N picks in this round, or earlier when every
      structure left is a copy of a picked one (distance below SELECT_SAME).
@@ -103,8 +103,7 @@ dft_sp = os.path.join(frame_dir, layout.DFT_SP)
 pool_dir = os.path.join(dft_sp, layout.DFT_POOL)
 if not os.path.isdir(pool_dir):
     sys.exit("%s not found -- run dft/01_collect_configs.py first" % pool_dir)
-rounds = list(settings.MODELS[settings.MODEL])
-earlier = rounds[:rounds.index(settings.ROUND)]
+earlier = settings.ROUNDS[:-1]
 print("%s   N = %d   earlier rounds: %s" % (dft_sp, ds.SELECT_N, ", ".join(earlier) or "none"))
 
 report = []              # one dict per reaction

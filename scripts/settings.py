@@ -10,6 +10,7 @@ import os
 import sys
 
 from _common import REPO
+import layout
 
 # --------------------------------------------------------------------------
 # the machine: the name of a block in scripts/machine.py
@@ -45,6 +46,7 @@ FRAMEWORKS = {
 FRAMEWORK = "MOR"      # the current framework: edit this line per submission
 
 ROUND = "round0"       # the sampling -> DFT -> fine-tune round
+PIPELINE_MODEL = 1     # round1 and later: the model that runs the steps (models/model_<k>.model in the round folder)
 REACTIONS = "reaction.yaml"
 
 
@@ -54,8 +56,11 @@ MODEL = os.environ.get("PYNTAZ_JOB_MODEL_NAME", MODEL)
 ROUND = os.environ.get("PYNTAZ_JOB_ROUND", ROUND)
 FRAMEWORK = os.environ.get("PYNTAZ_JOB_FRAMEWORK", FRAMEWORK)
 
-if MODEL not in MODELS or ROUND not in MODELS[MODEL]:
-    sys.exit("settings.py: no MODELS entry for MODEL = %r, ROUND = %r" % (MODEL, ROUND))
+if MODEL not in MODELS:
+    sys.exit("settings.py: no MODELS entry for MODEL = %r" % MODEL)
+if not (ROUND.startswith("round") and ROUND[5:].isdigit()):
+    sys.exit("settings.py: ROUND = %r is not round0, round1, ..." % ROUND)
+ROUNDS = ["round%d" % number for number in range(int(ROUND[5:]) + 1)]   # this round and the earlier ones
 if FRAMEWORK not in FRAMEWORKS:
     sys.exit("settings.py: no FRAMEWORKS entry for FRAMEWORK = %r" % FRAMEWORK)
 CODE = FRAMEWORK                # the zeolite code, as the step scripts call it
@@ -89,10 +94,15 @@ D3_XC = "pbe"                   # D3 parameters of the functional the model repr
 # the model of MODEL and ROUND. Every job.sh sets PYNTAZ_JOB_MODEL,
 # PYNTAZ_JOB_HEAD and PYNTAZ_JOB_D3, so a queued job keeps the model it was
 # submitted with even after MODEL is changed for the next submission
-MACE_MODEL = os.environ.get(
-    "PYNTAZ_JOB_MODEL", os.path.join(REPO, "models", MODELS[MODEL][ROUND]["file"]))
-MACE_HEAD = os.environ.get("PYNTAZ_JOB_HEAD", MODELS[MODEL][ROUND]["head"] or "") or None
-MACE_D3 = os.environ.get("PYNTAZ_JOB_D3", "1" if MODELS[MODEL][ROUND]["d3"] else "0") == "1"
+if ROUND == "round0":
+    _model = dict(MODELS[MODEL]["round0"])
+    _model["file"] = os.path.join(REPO, "models", _model["file"])
+else:
+    _model = {"file": os.path.join(REPO, layout.round_model(MODEL, ROUND, FRAMEWORK, PIPELINE_MODEL)),
+              "head": None, "d3": False}
+MACE_MODEL = os.environ.get("PYNTAZ_JOB_MODEL", _model["file"])
+MACE_HEAD = os.environ.get("PYNTAZ_JOB_HEAD", _model["head"] or "") or None
+MACE_D3 = os.environ.get("PYNTAZ_JOB_D3", "1" if _model["d3"] else "0") == "1"
 
 SLURM_MEMORY = "16G"
 

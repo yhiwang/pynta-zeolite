@@ -7,7 +7,7 @@ It reads every pick under
 
     runs/<MODEL>/<round>/<FRAMEWORK>/DFT_sp/<i>_rxn/<site>/<pair>/<stem>/<name>/
 
-for settings.ROUND and the earlier rounds of the model (settings.MODELS),
+for settings.ROUND and the earlier rounds of the model (settings.ROUNDS),
 and gives each structure its DFT values under the names MACE trains on:
 
     info["REF_energy"]     DFT energy (sigma -> 0), eV
@@ -74,8 +74,7 @@ if ds.TRAIN_VALID_FRACTION + ds.TRAIN_TEST_FRACTION >= 1.0:
     sys.exit("TRAIN_VALID_FRACTION + TRAIN_TEST_FRACTION must be below 1")
 
 models = [layout.model_dirname(number) for number in range(1, ds.TRAIN_MODELS + 1)]
-rounds = list(settings.MODELS[settings.MODEL])
-rounds = rounds[:rounds.index(settings.ROUND) + 1]          # this round and the earlier ones
+rounds = settings.ROUNDS               # this round and the earlier ones
 out = os.path.join(layout.framework_dir(settings.MODEL, settings.ROUND, settings.FRAMEWORK),
                    layout.DFT_SP, layout.DFT_TRAINING)
 if os.path.isdir(out):                 # the fine-tune step trains every model folder it finds here

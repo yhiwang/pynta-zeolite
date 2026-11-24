@@ -14,8 +14,8 @@ FT_FOUNDATION = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 # the full OMat24 train set that passes the filter to FT_OMAT24_PASS (once, ~4 h);
 # mace_ft/00_omat24_sample.py picks FT_OMAT24_KEEP of them at random into FT_OMAT24_FILE
 FT_OMAT24_DIR = os.path.expandvars("$SCRATCH/omat24_full")    # the unpacked train files
-FT_OMAT24_PASS = os.path.join("runs", "omat0", "replay")
-FT_OMAT24_FILE = os.path.join("runs", "omat0", "replay")
+FT_OMAT24_PASS = os.path.join("runs", "omat0", "replay", "omat24_pass.extxyz")
+FT_OMAT24_FILE = os.path.join("runs", "omat0", "replay", "omat24_replay.extxyz")
 FT_OMAT24_KEEP = 903            # None = all saved configs; 903 = the MP replay size of the MPA run
 FT_REPLAY = "mp"    # "mp": MACE's MP file, filtered by 01_train.py; or the path of a
                                 # filtered replay extxyz, which MACE reads whole (FT_OMAT24_FILE)
